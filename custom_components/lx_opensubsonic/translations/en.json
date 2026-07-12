@@ -1,0 +1,46 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "LX OpenSubsonic",
+        "description": "OpenSubsonic bridge. Configure search source, music-source JS URL, and quality.",
+        "data": {
+          "username": "Username (Music Assistant)",
+          "password": "Password (Music Assistant)",
+          "search_source": "Default search source",
+          "music_source_js_url": "Music source JS URL",
+          "preferred_quality": "Preferred quality"
+        },
+        "data_description": {
+          "username": "Account used by Music Assistant. Default: admin",
+          "password": "Password used by Music Assistant. Default: password",
+          "search_source": "Search platform: tx/wy/kg/kw/mg. Default: tx",
+          "music_source_js_url": "Music source JS URL. Runtime-parsed for stream API. Do not hard-code paid keys.",
+          "preferred_quality": "Preferred stream quality with fallback. Default: flac"
+        }
+      },
+      "init": {
+        "title": "LX OpenSubsonic options",
+        "description": "Hot-switch search source / quality / music source JS.",
+        "data": {
+          "search_source": "Default search source",
+          "music_source_js_url": "Music source JS URL",
+          "preferred_quality": "Preferred quality"
+        },
+        "data_description": {
+          "search_source": "Search platform: tx/wy/kg/kw/mg. Default: tx",
+          "music_source_js_url": "Music source JS URL for stream resolution",
+          "preferred_quality": "Preferred quality. Default: flac"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect",
+      "invalid_auth": "Invalid auth",
+      "unknown": "Unknown error"
+    },
+    "abort": {
+      "already_configured": "Already configured"
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "LX OpenSubsonic",
+        "description": "OpenSubsonic 桥接。搜索源 / 音源 JS / 音质可配置。",
+        "data": {
+          "username": "用户名（给 Music Assistant）",
+          "password": "密码（给 Music Assistant）",
+          "search_source": "默认搜索源",
+          "music_source_js_url": "音源 JS 链接",
+          "preferred_quality": "优先音质"
+        },
+        "data_description": {
+          "username": "Music Assistant 连接本集成时使用的账号。默认：admin",
+          "password": "Music Assistant 连接本集成时使用的密码。默认：password",
+          "search_source": "搜索平台：tx/wy/kg/kw/mg。默认：tx",
+          "music_source_js_url": "音源 JS 地址，运行时解析取链接口。付费 Key 不要写进代码。",
+          "preferred_quality": "取链优先音质，失败自动降级。默认：flac"
+        }
+      },
+      "init": {
+        "title": "LX OpenSubsonic 选项",
+        "description": "热切换搜索源 / 音质 / 音源 JS。",
+        "data": {
+          "search_source": "默认搜索源",
+          "music_source_js_url": "音源 JS 链接",
+          "preferred_quality": "优先音质"
+        },
+        "data_description": {
+          "search_source": "搜索平台：tx/wy/kg/kw/mg。默认：tx",
+          "music_source_js_url": "音源 JS 链接，用于播放取链",
+          "preferred_quality": "优先音质。默认：flac"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "无法连接",
+      "invalid_auth": "认证无效",
+      "unknown": "未知错误"
+    },
+    "abort": {
+      "already_configured": "已配置"
+    }
+  }
+}
