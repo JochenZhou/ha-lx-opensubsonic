@@ -9,14 +9,16 @@
           "password": "Password (Music Assistant)",
           "search_source": "Default search source",
           "music_source_js_url": "Music source JS URL",
-          "preferred_quality": "Preferred quality"
+          "preferred_quality": "Preferred quality",
+          "playlist_song_virtual_album": "Use song-level virtual albumId for online playlists"
         },
         "data_description": {
           "username": "Account used by Music Assistant. Default: admin",
           "password": "Password used by Music Assistant. Default: password",
           "search_source": "Search platform: tx/wy/kg/kw/mg. Default: tx",
           "music_source_js_url": "Music source JS URL. Runtime-parsed for stream API. Do not hard-code paid keys.",
-          "preferred_quality": "Preferred stream quality with fallback. Default: flac"
+          "preferred_quality": "Preferred stream quality with fallback. Default: flac",
+          "playlist_song_virtual_album": "Default off. Only for online-search playlists (pl_tx_*): remap each song albumId/parent to the song id so Music Assistant can show per-track covers. Normal song/album search is unchanged."
         }
       },
       "init": {
@@ -25,12 +27,14 @@
         "data": {
           "search_source": "Default search source",
           "music_source_js_url": "Music source JS URL",
-          "preferred_quality": "Preferred quality"
+          "preferred_quality": "Preferred quality",
+          "playlist_song_virtual_album": "Use song-level virtual albumId for online playlists"
         },
         "data_description": {
           "search_source": "Search platform: tx/wy/kg/kw/mg. Default: tx",
           "music_source_js_url": "Music source JS URL for stream resolution",
-          "preferred_quality": "Preferred quality. Default: flac"
+          "preferred_quality": "Preferred quality. Default: flac",
+          "playlist_song_virtual_album": "Default off. Only for online-search playlists (pl_tx_*): remap each song albumId/parent to the song id so Music Assistant can show per-track covers. Normal song/album search is unchanged."
         }
       }
     },

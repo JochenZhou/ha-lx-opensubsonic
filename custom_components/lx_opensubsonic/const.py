@@ -19,5 +19,10 @@ DEFAULT_MUSIC_SOURCE_JS_URL = (
 CONF_PREFERRED_QUALITY = "preferred_quality"
 DEFAULT_PREFERRED_QUALITY = "flac"
 
+# Only for online-search playlists (pl_tx_*): remap each song albumId/parent to song-level virtual id
+# so MA can resolve per-track covers. Default OFF.
+CONF_PLAYLIST_SONG_VIRTUAL_ALBUM = "playlist_song_virtual_album"
+DEFAULT_PLAYLIST_SONG_VIRTUAL_ALBUM = False
+
 SEARCH_SOURCES = ["tx", "wy", "kg", "kw", "mg"]
 QUALITY_OPTIONS = ["flac", "320k", "128k", "flac24bit", "hires"]

@@ -42,10 +42,18 @@ def parse_lrc(lrc: str) -> list[dict[str, Any]]:
 
 
 class OpenSubsonicAPI:
-    def __init__(self, backend: MusicBackend, username: str, password: str) -> None:
+    def __init__(
+        self,
+        backend: MusicBackend,
+        username: str,
+        password: str,
+        playlist_song_virtual_album: bool = False,
+    ) -> None:
         self.backend = backend
         self.username = username
         self.password = password
+        # Only affects online-search playlists (pl_tx_*). Default False.
+        self.playlist_song_virtual_album = bool(playlist_song_virtual_album)
 
     def ok(self, data: dict[str, Any] | None = None) -> dict[str, Any]:
         base = {
@@ -315,17 +323,22 @@ class OpenSubsonicAPI:
             if not pl:
                 return self.fail(70, f"Playlist not found: {aid}")
             # Playlist cover only for the album object itself.
-            # Each song uses its own coverArt (song id -> getCoverArt), never playlist cover.
+            # Optional: remap each song albumId/parent to song-level virtual id (MA cover workaround).
             song_items = []
             for s in songs:
                 child = s.to_child()
-                # Force song-level coverArt id for MA per-track image resolution.
+                # Always use song-level coverArt id; never playlist cover.
                 child["coverArt"] = s.id
-                # Prevent MA from treating playlist as the song album parent cover source.
-                if not child.get("albumId") or str(child.get("albumId")).startswith("pl_"):
+                if self.playlist_song_virtual_album:
+                    # Song-level virtual album: MA resolves cover via getAlbum(song_id)/getCoverArt(song_id)
                     child["albumId"] = s.id
-                if not child.get("parent") or str(child.get("parent")).startswith("pl_"):
-                    child["parent"] = child["albumId"]
+                    child["parent"] = s.id
+                else:
+                    # Default: keep real album ids; only avoid playlist id as parent/albumId
+                    if not child.get("albumId") or str(child.get("albumId")).startswith("pl_"):
+                        child["albumId"] = s.id
+                    if not child.get("parent") or str(child.get("parent")).startswith("pl_"):
+                        child["parent"] = child["albumId"]
                 song_items.append(child)
             album = {
                 "id": pl.id,
@@ -343,6 +356,30 @@ class OpenSubsonicAPI:
                 "song": song_items,
             }
             return self.ok({"album": album})
+        # Song-level virtual album (enabled by playlist_song_virtual_album)
+        if str(aid).startswith(("tx_", "kg_", "kw_", "mg_", "wy_")):
+            song = await self.backend.get_song(str(aid))
+            if song:
+                child = song.to_child()
+                child["coverArt"] = song.id
+                child["albumId"] = song.id
+                child["parent"] = song.id
+                album = {
+                    "id": song.id,
+                    "name": song.title,
+                    "title": song.title,
+                    "album": song.title,
+                    "artist": song.artist,
+                    "artistId": song.artist_id,
+                    "songCount": 1,
+                    "duration": song.duration,
+                    "created": datetime.now(timezone.utc).isoformat(),
+                    "coverArt": song.id,
+                    "isDir": True,
+                    "playCount": 0,
+                    "song": [child],
+                }
+                return self.ok({"album": album})
         # If album id unknown, try as song id
         name, songs = await self.backend.get_album_songs(aid)
         if not songs:
@@ -383,6 +420,10 @@ class OpenSubsonicAPI:
             pl, _ = await self.backend.get_playlist(aid)
             if pl and is_valid_cover_url(pl.cover):
                 pic = pl.cover
+        if not pic and str(aid).startswith(("tx_", "kg_", "kw_", "mg_", "wy_")):
+            song = await self.backend.get_song(str(aid))
+            if song and is_valid_cover_url(song.cover):
+                pic = song.cover
         if not is_valid_cover_url(pic):
             pic = ""
         return self.ok(

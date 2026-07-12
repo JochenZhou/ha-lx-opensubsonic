@@ -11,9 +11,11 @@ from homeassistant.helpers import selector
 
 from .const import (
     CONF_MUSIC_SOURCE_JS_URL,
+    CONF_PLAYLIST_SONG_VIRTUAL_ALBUM,
     CONF_PREFERRED_QUALITY,
     CONF_SEARCH_SOURCE,
     DEFAULT_MUSIC_SOURCE_JS_URL,
+    DEFAULT_PLAYLIST_SONG_VIRTUAL_ALBUM,
     DEFAULT_PREFERRED_QUALITY,
     DEFAULT_SEARCH_SOURCE,
     DEFAULT_USERNAME,
@@ -49,6 +51,12 @@ def _schema(defaults: dict | None = None, *, include_auth: bool = True) -> vol.S
     ] = selector.SelectSelector(
         selector.SelectSelectorConfig(options=QUALITY_OPTIONS, mode=selector.SelectSelectorMode.DROPDOWN)
     )
+    fields[
+        vol.Optional(
+            CONF_PLAYLIST_SONG_VIRTUAL_ALBUM,
+            default=d.get(CONF_PLAYLIST_SONG_VIRTUAL_ALBUM, DEFAULT_PLAYLIST_SONG_VIRTUAL_ALBUM),
+        )
+    ] = bool
     return vol.Schema(fields)
 
 
@@ -83,7 +91,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input: dict | None = None) -> FlowResult:
         if user_input is not None:
-            # Preserve auth fields; replace runtime options.
             new_data = {
                 CONF_USERNAME: self._config_entry.data.get(CONF_USERNAME, DEFAULT_USERNAME),
                 CONF_PASSWORD: self._config_entry.data.get(CONF_PASSWORD, "password"),

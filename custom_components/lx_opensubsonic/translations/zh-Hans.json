@@ -9,14 +9,16 @@
           "password": "密码（给 Music Assistant）",
           "search_source": "默认搜索源",
           "music_source_js_url": "音源 JS 链接",
-          "preferred_quality": "优先音质"
+          "preferred_quality": "优先音质",
+          "playlist_song_virtual_album": "在线歌单曲目使用歌曲级虚拟专辑ID"
         },
         "data_description": {
           "username": "Music Assistant 连接本集成时使用的账号。默认：admin",
           "password": "Music Assistant 连接本集成时使用的密码。默认：password",
           "search_source": "搜索平台：tx/wy/kg/kw/mg。默认：tx",
           "music_source_js_url": "音源 JS 地址，运行时解析取链接口。付费 Key 不要写进代码。",
-          "preferred_quality": "取链优先音质，失败自动降级。默认：flac"
+          "preferred_quality": "取链优先音质，失败自动降级。默认：flac",
+          "playlist_song_virtual_album": "默认关闭。仅对在线搜索打开的歌单(pl_tx_*)生效：把每首歌 albumId/parent 改成歌曲自身ID，便于 Music Assistant 显示每首歌真实封面。普通搜索歌曲/专辑不受影响。"
         }
       },
       "init": {
@@ -25,12 +27,14 @@
         "data": {
           "search_source": "默认搜索源",
           "music_source_js_url": "音源 JS 链接",
-          "preferred_quality": "优先音质"
+          "preferred_quality": "优先音质",
+          "playlist_song_virtual_album": "在线歌单曲目使用歌曲级虚拟专辑ID"
         },
         "data_description": {
           "search_source": "搜索平台：tx/wy/kg/kw/mg。默认：tx",
           "music_source_js_url": "音源 JS 链接，用于播放取链",
-          "preferred_quality": "优先音质。默认：flac"
+          "preferred_quality": "优先音质。默认：flac",
+          "playlist_song_virtual_album": "默认关闭。仅对在线搜索打开的歌单(pl_tx_*)生效：把每首歌 albumId/parent 改成歌曲自身ID，便于 Music Assistant 显示每首歌真实封面。普通搜索歌曲/专辑不受影响。"
         }
       }
     },

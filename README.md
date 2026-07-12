@@ -42,8 +42,9 @@ cp -r custom_components/lx_opensubsonic /config/custom_components/
 | `search_source` | 默认搜索源：`tx` / `wy` / `kg` / `kw` / `mg` |
 | `music_source_js_url` | 音源 JS 链接（推荐，运行时解析取链，不内置付费 Key） |
 | `preferred_quality` | 优先音质：`flac` / `320k` / `128k` / `flac24bit` / `hires` |
+| `playlist_song_virtual_album` | 默认关闭。仅对在线搜索打开的歌单生效：把每首歌 `albumId/parent` 改成歌曲自身 ID，便于 MA 显示每首歌真实封面 |
 
-支持 **Options 热切换** 搜索源 / 音质 / 音源 JS。
+支持 **Options 热切换** 搜索源 / 音质 / 音源 JS / 歌单虚拟专辑。
 
 ### 音源 JS 示例
 

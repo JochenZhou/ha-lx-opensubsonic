@@ -5,6 +5,7 @@ Exposes an OpenSubsonic-compatible REST API under:
 
 - Configurable search source (tx/wy/kg/kw/mg)
 - Stream via third-party music source JS URL (no hard-coded paid key)
+- Optional song-level virtual albumId only for online-search playlists
 """
 
 from __future__ import annotations
@@ -19,8 +20,10 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     CONF_MUSIC_SOURCE_JS_URL,
+    CONF_PLAYLIST_SONG_VIRTUAL_ALBUM,
     CONF_PREFERRED_QUALITY,
     CONF_SEARCH_SOURCE,
+    DEFAULT_PLAYLIST_SONG_VIRTUAL_ALBUM,
     DEFAULT_PREFERRED_QUALITY,
     DEFAULT_SEARCH_SOURCE,
     DOMAIN,
@@ -49,6 +52,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     search_source = cfg.get(CONF_SEARCH_SOURCE) or DEFAULT_SEARCH_SOURCE
     music_source_js_url = (cfg.get(CONF_MUSIC_SOURCE_JS_URL) or "").strip()
     preferred_quality = cfg.get(CONF_PREFERRED_QUALITY) or DEFAULT_PREFERRED_QUALITY
+    playlist_song_virtual_album = bool(
+        cfg.get(CONF_PLAYLIST_SONG_VIRTUAL_ALBUM, DEFAULT_PLAYLIST_SONG_VIRTUAL_ALBUM)
+    )
 
     backend = MusicBackend(
         session,
@@ -56,7 +62,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         music_source_js_url=music_source_js_url,
         preferred_quality=preferred_quality,
     )
-    api = OpenSubsonicAPI(backend, username=username, password=password)
+    api = OpenSubsonicAPI(
+        backend,
+        username=username,
+        password=password,
+        playlist_song_virtual_album=playlist_song_virtual_album,
+    )
 
     hass.data[DOMAIN] = {
         "api": api,
@@ -64,6 +75,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "username": username,
         "password": password,
         "search_source": search_source,
+        "playlist_song_virtual_album": playlist_song_virtual_album,
         "entry_id": entry.entry_id,
     }
 
@@ -81,6 +93,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     f"- 搜索源: `{search_source}`\n"
                     f"- 音质: `{preferred_quality}`\n"
                     f"- 播放: `{mode}`\n"
+                    f"- 歌单曲目虚拟专辑ID: `{'开' if playlist_song_virtual_album else '关'}`\n"
                     f"- REST: `/api/lx_opensubsonic/rest`\n"
                 ),
                 "notification_id": "lx_opensubsonic_started",
@@ -88,7 +101,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             blocking=False,
         )
     )
-    _LOGGER.info("LX OpenSubsonic ready search=%s quality=%s mode=%s", search_source, preferred_quality, mode)
+    _LOGGER.info(
+        "LX OpenSubsonic ready search=%s quality=%s mode=%s virtual_album=%s",
+        search_source,
+        preferred_quality,
+        mode,
+        playlist_song_virtual_album,
+    )
     return True
 
 
