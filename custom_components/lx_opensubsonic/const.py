@@ -48,5 +48,9 @@ DEFAULT_PLAYLIST_SOURCE = "auto"
 PLAYLIST_SOURCE_OPTIONS = [
     {"value": "auto", "label": "自动识别"},
     {"value": "tx", "label": "QQ音乐 (tx)"},
+    {"value": "wy", "label": "网易云音乐 (wy)"},
+    {"value": "kg", "label": "酷狗音乐 (kg)"},
+    {"value": "kw", "label": "酷我音乐 (kw)"},
+    {"value": "mg", "label": "咪咕音乐 (mg)"},
 ]
 PLAYLIST_SOURCE_LABELS = {o["value"]: o["label"] for o in PLAYLIST_SOURCE_OPTIONS}

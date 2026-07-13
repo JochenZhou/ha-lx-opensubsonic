@@ -97,17 +97,25 @@ https://github.com/JochenZhou/ha-lx-opensubsonic
 - 多搜索源：`tx` / `wy` / `kg` / `kw` / `mg`
 - 音质选择
 - 健康状态传感器与测试连接按钮
-- **手动导入 QQ 歌单** 到 OpenSubsonic 播放列表（供 MA 播放列表使用）
+- **手动导入多平台歌单** 到 OpenSubsonic 播放列表（供 MA 播放列表使用）
 
 ## 歌单导入（手动）
 
-支持通过实体 UI 手动导入 **QQ 音乐歌单**：
+支持通过实体 UI 手动导入多平台歌单到 OpenSubsonic 播放列表：
+
+- QQ 音乐 `tx`
+- 网易云 `wy`
+- 酷狗 `kg`
+- 酷我 `kw`
+- 咪咕 `mg`
+
+步骤：
 
 1. 填写 `歌单链接或ID`
-2. 选择 `歌单平台`（可自动识别）
+2. 选择 `歌单平台`（可自动识别；纯数字 ID 默认按 QQ）
 3. 点击 `导入歌单`
 4. 在 Music Assistant 中让歌单进入库（二选一）：
-   - **推荐**：浏览 → `OpenSubsonic Media Server Library` → **播放列表** → 点开新歌单一次
+   - **推荐**：浏览 → `OpenSubsonic Media Server Library` → **播放列表** → 点开新歌单一次  
    - 或直接 **重启 Music Assistant**
 
 多歌单管理：

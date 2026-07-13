@@ -1,4 +1,4 @@
-"""Imported playlist storage and TX playlist import helpers."""
+"""Imported playlist storage and multi-source playlist import helpers."""
 
 from __future__ import annotations
 
@@ -213,6 +213,16 @@ class PlaylistStore:
         return self.last_message
 
 
+_SUPPORTED_SOURCES = ("tx", "wy", "kg", "kw", "mg")
+_MOBILE_UA = (
+    "Mozilla/5.0 (Linux; Android 10; HLK-AL00) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+)
+_IPHONE_UA = (
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) "
+    "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1"
+)
+
 _ID_PATTERNS = {
     "tx": [
         re.compile(r"playlist/(\d+)", re.I),
@@ -221,11 +231,63 @@ _ID_PATTERNS = {
         re.compile(r"^(\d{6,})$"),
     ],
     "wy": [
-        re.compile(r"playlist\?id=(\d+)", re.I),
+        re.compile(r"[?&#]id=(\d+)", re.I),
+        re.compile(r"/playlist/(\d+)", re.I),
+        re.compile(r"^(\d{6,})$"),
+    ],
+    "kg": [
+        re.compile(r"special/single/(\d+)", re.I),
+        re.compile(r"plist/list/(\d+)", re.I),
+        re.compile(r"specialid[=_](\d+)", re.I),
+        re.compile(r"/(\d+)\.html", re.I),
+        re.compile(r"^(\d{4,})$"),
+    ],
+    "kw": [
+        re.compile(r"playlist(?:_detail)?/(\d+)", re.I),
+        re.compile(r"[?&]pid=(\d+)", re.I),
+        re.compile(r"^(\d{6,})$"),
+    ],
+    "mg": [
+        re.compile(r"playlistId=(\d+)", re.I),
+        re.compile(r"[?&]id=(\d+)", re.I),
         re.compile(r"/playlist/(\d+)", re.I),
         re.compile(r"^(\d{6,})$"),
     ],
 }
+
+
+def _now_iso() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _track(
+    *,
+    source: str,
+    songmid: str,
+    title: str,
+    artist: str,
+    album: str = "Unknown Album",
+    album_id: str = "",
+    cover: str = "",
+    duration: int = 0,
+    extra: dict[str, Any] | None = None,
+) -> ImportedTrack:
+    artist = artist or "Unknown"
+    return ImportedTrack(
+        id=f"{source}_{songmid}",
+        title=title or "Unknown",
+        artist=artist,
+        album=album or "Unknown Album",
+        album_id=album_id or f"alb_{source}_{songmid}",
+        artist_id=f"artist_{artist.split('、')[0]}",
+        cover=cover if is_valid_cover_url(cover) else "",
+        duration=int(duration or 0),
+        source=source,
+        songmid=str(songmid),
+        extra=dict(extra or {}),
+    )
 
 
 def detect_source_and_id(text: str, preferred: str = "auto") -> tuple[str, str]:
@@ -237,16 +299,23 @@ def detect_source_and_id(text: str, preferred: str = "auto") -> tuple[str, str]:
         src = preferred
     elif "y.qq.com" in low or "qq.com" in low:
         src = "tx"
-    elif "music.163.com" in low or "163cn.tv" in low:
+    elif "music.163.com" in low or "163.com" in low or "163cn.tv" in low:
         src = "wy"
+    elif "kugou.com" in low:
+        src = "kg"
+    elif "kuwo.cn" in low:
+        src = "kw"
+    elif "migu.cn" in low or "nf.migu.cn" in low:
+        src = "mg"
     else:
-        src = "tx"  # default numeric id to QQ for MVP
+        src = "tx"  # bare numeric id defaults to QQ
+    if src not in _SUPPORTED_SOURCES:
+        raise ValueError(f"不支持的歌单平台: {src}")
     for pat in _ID_PATTERNS.get(src, []):
         m = pat.search(s)
         if m:
             return src, m.group(1)
-    # bare digits
-    m = re.search(r"(\d{6,})", s)
+    m = re.search(r"(\d{4,})", s)
     if m:
         return src, m.group(1)
     raise ValueError("无法解析歌单ID，请检查链接")
@@ -286,25 +355,21 @@ async def fetch_tx_playlist(session: ClientSession, remote_id: str) -> ImportedP
         if album_mid and album_mid != "空":
             sc = f"https://y.gtimg.cn/music/photo_new/T002R500x500M000{album_mid}.jpg"
         tracks.append(
-            ImportedTrack(
-                id=f"tx_{mid}",
+            _track(
+                source="tx",
+                songmid=mid,
                 title=item.get("title") or item.get("name") or "Unknown",
                 artist=artist,
                 album=album_name,
                 album_id=f"alb_tx_{album_mid}" if album_mid else f"tx_{mid}",
-                artist_id=f"artist_{artist.split('、')[0]}",
-                cover=sc if is_valid_cover_url(sc) else "",
+                cover=sc,
                 duration=int(item.get("interval") or 0),
-                source="tx",
-                songmid=mid,
                 extra={"album_mid": album_mid, "media_mid": (item.get("file") or {}).get("media_mid")},
             )
         )
     if not tracks:
         raise ValueError("歌单为空或解析失败")
-    from datetime import datetime, timezone
-
-    now = datetime.now(timezone.utc).isoformat()
+    now = _now_iso()
     return ImportedPlaylist(
         id=f"pl_tx_{remote_id}",
         name=cd.get("dissname") or cd.get("diss_name") or f"QQ歌单{remote_id}",
@@ -320,6 +385,299 @@ async def fetch_tx_playlist(session: ClientSession, remote_id: str) -> ImportedP
     )
 
 
+async def fetch_wy_playlist(session: ClientSession, remote_id: str) -> ImportedPlaylist:
+    url = f"https://music.163.com/api/v6/playlist/detail?id={remote_id}&n=1000"
+    timeout = ClientTimeout(total=30)
+    async with session.get(
+        url,
+        headers={"User-Agent": UA, "Referer": "https://music.163.com/"},
+        timeout=timeout,
+    ) as resp:
+        data = await resp.json(content_type=None)
+    if int(data.get("code") or 0) != 200:
+        raise ValueError(f"未获取到网易云歌单详情: {data.get('code')}")
+    pl = data.get("playlist") or {}
+    tracks: list[ImportedTrack] = []
+    for item in pl.get("tracks") or []:
+        sid = item.get("id")
+        if not sid:
+            continue
+        artists = item.get("ar") or item.get("artists") or []
+        artist = "、".join([a.get("name", "") for a in artists if a.get("name")]) or "Unknown"
+        album = item.get("al") or item.get("album") or {}
+        album_id = str(album.get("id") or "")
+        cover = album.get("picUrl") or ""
+        duration_ms = int(item.get("dt") or item.get("duration") or 0)
+        tracks.append(
+            _track(
+                source="wy",
+                songmid=str(sid),
+                title=item.get("name") or "Unknown",
+                artist=artist,
+                album=album.get("name") or "Unknown Album",
+                album_id=f"alb_wy_{album_id}" if album_id else f"wy_{sid}",
+                cover=cover,
+                duration=max(1, duration_ms // 1000) if duration_ms else 0,
+            )
+        )
+    # fallback: only trackIds present
+    if not tracks:
+        for tid in pl.get("trackIds") or []:
+            sid = tid.get("id") if isinstance(tid, dict) else tid
+            if not sid:
+                continue
+            tracks.append(_track(source="wy", songmid=str(sid), title=str(sid), artist="Unknown"))
+    if not tracks:
+        raise ValueError("网易云歌单为空或解析失败")
+    now = _now_iso()
+    creator = (pl.get("creator") or {}).get("nickname") or "WY"
+    created = pl.get("createTime")
+    created_s = str(int(created) // 1000) if isinstance(created, (int, float)) else str(created or now)
+    return ImportedPlaylist(
+        id=f"pl_wy_{remote_id}",
+        name=pl.get("name") or f"网易云歌单{remote_id}",
+        source="wy",
+        remote_id=str(remote_id),
+        cover=pl.get("coverImgUrl") if is_valid_cover_url(pl.get("coverImgUrl") or "") else "",
+        owner=creator,
+        comment=str(pl.get("description") or "")[:200],
+        song_count=len(tracks),
+        created=created_s,
+        updated_at=now,
+        tracks=tracks,
+    )
+
+
+async def fetch_kg_playlist(session: ClientSession, remote_id: str) -> ImportedPlaylist:
+    url = f"https://m.kugou.com/plist/list/{remote_id}/?json=true"
+    timeout = ClientTimeout(total=30)
+    async with session.get(url, headers={"User-Agent": _MOBILE_UA}, timeout=timeout) as resp:
+        data = await resp.json(content_type=None)
+    info = ((data.get("info") or {}).get("list") or {}) if isinstance(data.get("info"), dict) else {}
+    songs = (((data.get("list") or {}).get("list") or {}).get("info") or []) if isinstance(data.get("list"), dict) else []
+    tracks: list[ImportedTrack] = []
+    for item in songs:
+        h = item.get("hash") or item.get("320hash") or item.get("sqhash")
+        if not h:
+            continue
+        filename = item.get("filename") or ""
+        if " - " in filename:
+            artist, title = filename.split(" - ", 1)
+        else:
+            artist, title = "Unknown", filename or "Unknown"
+        album_id = str(item.get("album_id") or "")
+        cover = ""
+        tp = item.get("trans_param") or {}
+        if tp.get("union_cover"):
+            cover = str(tp["union_cover"]).replace("{size}", "400")
+        tracks.append(
+            _track(
+                source="kg",
+                songmid=str(h).lower(),
+                title=title,
+                artist=artist,
+                album=item.get("remark") or item.get("album_name") or "Unknown Album",
+                album_id=f"alb_kg_{album_id}" if album_id else f"kg_{h.lower()}",
+                cover=cover,
+                duration=int(item.get("duration") or 0),
+                extra={"hash": str(h).lower(), "album_id": album_id},
+            )
+        )
+    if not tracks:
+        raise ValueError("酷狗歌单为空或解析失败")
+    now = _now_iso()
+    cover = str(info.get("imgurl") or "").replace("{size}", "400")
+    return ImportedPlaylist(
+        id=f"pl_kg_{remote_id}",
+        name=info.get("specialname") or f"酷狗歌单{remote_id}",
+        source="kg",
+        remote_id=str(remote_id),
+        cover=cover if is_valid_cover_url(cover) else "",
+        owner=info.get("nickname") or "KG",
+        comment=str(info.get("intro") or "")[:200],
+        song_count=len(tracks),
+        created=str(info.get("publishtime") or now),
+        updated_at=now,
+        tracks=tracks,
+    )
+
+
+async def fetch_kw_playlist(session: ClientSession, remote_id: str) -> ImportedPlaylist:
+    url = (
+        "http://nplserver.kuwo.cn/pl.svc?op=getlistinfo"
+        f"&pid={remote_id}&pn=0&rn=1000&encode=utf8&keyset=pl2012"
+        "&identity=kuwo&pcmp4=1&vipver=MUSIC_9.0.5.0_W1&newver=1"
+    )
+    timeout = ClientTimeout(total=30)
+    async with session.get(url, headers={"User-Agent": UA}, timeout=timeout) as resp:
+        data = await resp.json(content_type=None)
+    musiclist = data.get("musiclist") or []
+    tracks: list[ImportedTrack] = []
+    for item in musiclist:
+        rid = item.get("id") or item.get("rid") or item.get("MUSICRID")
+        if isinstance(rid, str) and rid.upper().startswith("MUSIC_"):
+            rid = rid.split("_", 1)[-1]
+        if not rid:
+            continue
+        title = item.get("name") or item.get("SONGNAME") or item.get("FSONGNAME") or "Unknown"
+        artist = item.get("artist") or item.get("ARTIST") or item.get("AARTIST") or "Unknown"
+        album = item.get("album") or item.get("ALBUM") or "Unknown Album"
+        album_id = str(item.get("albumid") or item.get("ALBUMID") or "")
+        cover = item.get("pic") or item.get("img") or ""
+        if cover and cover.startswith("/"):
+            cover = f"https://img4.kuwo.cn/star/albumcover/500{cover}"
+        duration = item.get("duration") or item.get("DURATION") or 0
+        try:
+            duration = int(float(duration))
+        except Exception:
+            duration = 0
+        tracks.append(
+            _track(
+                source="kw",
+                songmid=str(rid),
+                title=title,
+                artist=artist,
+                album=album,
+                album_id=f"alb_kw_{album_id}" if album_id else f"kw_{rid}",
+                cover=cover,
+                duration=duration,
+            )
+        )
+    if not tracks:
+        raise ValueError("酷我歌单为空或解析失败")
+    now = _now_iso()
+    cover = data.get("pic") or data.get("img700") or data.get("img300") or ""
+    return ImportedPlaylist(
+        id=f"pl_kw_{remote_id}",
+        name=data.get("title") or data.get("name") or f"酷我歌单{remote_id}",
+        source="kw",
+        remote_id=str(remote_id),
+        cover=cover if is_valid_cover_url(cover) else "",
+        owner=data.get("uname") or data.get("username") or "KW",
+        comment=str(data.get("info") or data.get("desc") or "")[:200],
+        song_count=len(tracks),
+        created=str(data.get("ctime") or data.get("abstime") or now),
+        updated_at=now,
+        tracks=tracks,
+    )
+
+
+async def fetch_mg_playlist(session: ClientSession, remote_id: str) -> ImportedPlaylist:
+    headers = {"User-Agent": _IPHONE_UA, "Referer": "https://m.music.migu.cn/"}
+    timeout = ClientTimeout(total=30)
+    info: dict[str, Any] = {}
+    async with session.get(
+        f"https://c.musicapp.migu.cn/MIGUM3.0/resource/playlist/v2.0?playlistId={remote_id}",
+        headers=headers,
+        timeout=timeout,
+    ) as resp:
+        meta = await resp.json(content_type=None)
+    if str(meta.get("code") or "") in {"000000", "0", "200"}:
+        info = meta.get("data") or {}
+    tracks: list[ImportedTrack] = []
+    page = 1
+    while page <= 20:
+        async with session.get(
+            "https://app.c.nf.migu.cn/MIGUM3.0/resource/playlist/song/v2.0"
+            f"?pageNo={page}&pageSize=50&playlistId={remote_id}",
+            headers=headers,
+            timeout=timeout,
+        ) as resp:
+            body = await resp.json(content_type=None)
+        if str(body.get("code") or "") not in {"000000", "0", "200"}:
+            if page == 1:
+                raise ValueError(f"未获取到咪咕歌单详情: {body.get('code')}")
+            break
+        song_list = (body.get("data") or {}).get("songList") or []
+        if not song_list:
+            break
+        for item in song_list:
+            song_id = item.get("songId") or item.get("contentId") or item.get("copyrightId")
+            if not song_id:
+                continue
+            singers = item.get("singerList") or item.get("singers") or []
+            if isinstance(singers, list):
+                artist = "、".join(
+                    [(s.get("name") if isinstance(s, dict) else str(s)) for s in singers if s]
+                ) or "Unknown"
+            else:
+                artist = str(singers or "Unknown")
+            cover = (
+                item.get("img1")
+                or item.get("img2")
+                or item.get("img3")
+                or item.get("albumImg")
+                or ""
+            )
+            imgs = item.get("imgItems") or []
+            if not cover and imgs and isinstance(imgs, list):
+                cover = (imgs[0] or {}).get("img") or ""
+            album = item.get("album") or item.get("albumName") or "Unknown Album"
+            if isinstance(album, dict):
+                album_name = album.get("name") or "Unknown Album"
+                album_id = str(album.get("id") or "")
+            else:
+                album_name = str(album)
+                album_id = str(item.get("albumId") or "")
+            duration = item.get("duration") or item.get("length") or 0
+            try:
+                duration = int(float(duration))
+            except Exception:
+                duration = 0
+            tracks.append(
+                _track(
+                    source="mg",
+                    songmid=str(song_id),
+                    title=item.get("songName") or item.get("name") or "Unknown",
+                    artist=artist,
+                    album=album_name,
+                    album_id=f"alb_mg_{album_id}" if album_id else f"mg_{song_id}",
+                    cover=cover,
+                    duration=duration,
+                    extra={"contentId": item.get("contentId") or ""},
+                )
+            )
+        total = int((body.get("data") or {}).get("totalCount") or 0)
+        if total and len(tracks) >= total:
+            break
+        if len(song_list) < 50:
+            break
+        page += 1
+    if not tracks:
+        raise ValueError("咪咕歌单为空或解析失败")
+    now = _now_iso()
+    cover = ((info.get("imgItem") or {}).get("img") if isinstance(info.get("imgItem"), dict) else "") or info.get("img") or ""
+    return ImportedPlaylist(
+        id=f"pl_mg_{remote_id}",
+        name=info.get("title") or info.get("name") or f"咪咕歌单{remote_id}",
+        source="mg",
+        remote_id=str(remote_id),
+        cover=cover if is_valid_cover_url(cover) else "",
+        owner=info.get("ownerName") or info.get("creator") or "MG",
+        comment=str(info.get("summary") or info.get("desc") or "")[:200],
+        song_count=len(tracks),
+        created=str(info.get("publishTime") or now),
+        updated_at=now,
+        tracks=tracks,
+    )
+
+
+_FETCHERS = {
+    "tx": fetch_tx_playlist,
+    "wy": fetch_wy_playlist,
+    "kg": fetch_kg_playlist,
+    "kw": fetch_kw_playlist,
+    "mg": fetch_mg_playlist,
+}
+
+
+async def fetch_playlist_by_source(session: ClientSession, source: str, remote_id: str) -> ImportedPlaylist:
+    fetcher = _FETCHERS.get(source)
+    if not fetcher:
+        raise ValueError(f"不支持的歌单平台: {source}")
+    return await fetcher(session, remote_id)
+
+
 async def import_playlist(
     session: ClientSession,
     store: PlaylistStore,
@@ -327,13 +685,11 @@ async def import_playlist(
     preferred_source: str = "auto",
 ) -> ImportedPlaylist:
     source, remote_id = detect_source_and_id(text, preferred_source)
-    if source != "tx":
-        raise ValueError("当前版本仅支持导入 QQ 音乐歌单（tx）")
-    pl = await fetch_tx_playlist(session, remote_id)
+    pl = await fetch_playlist_by_source(session, source, remote_id)
     store.last_input = text
     store.last_source = preferred_source or "auto"
     store.upsert(pl)
-    store.last_message = f"已导入《{pl.name}》共 {pl.song_count} 首"
+    store.last_message = f"已导入《{pl.name}》共 {pl.song_count} 首（{source}）"
     store.save()
     return pl
 
@@ -342,10 +698,10 @@ async def refresh_playlist(session: ClientSession, store: PlaylistStore) -> Impo
     pl = store.selected()
     if not pl:
         raise ValueError("没有选中的歌单")
-    if pl.source != "tx":
-        raise ValueError("当前版本仅支持刷新 QQ 音乐歌单")
-    new_pl = await fetch_tx_playlist(session, pl.remote_id)
+    if pl.source not in _FETCHERS:
+        raise ValueError(f"不支持刷新该平台歌单: {pl.source}")
+    new_pl = await fetch_playlist_by_source(session, pl.source, pl.remote_id)
     store.upsert(new_pl)
-    store.last_message = f"已刷新《{new_pl.name}》共 {new_pl.song_count} 首"
+    store.last_message = f"已刷新《{new_pl.name}》共 {new_pl.song_count} 首（{new_pl.source}）"
     store.save()
     return new_pl

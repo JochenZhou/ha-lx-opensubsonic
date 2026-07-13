@@ -118,10 +118,19 @@ class LxImportPlaylistButton(_BaseBtn):
         for st in self.hass.states.async_all("select"):
             if "ge_dan_ping_tai" in st.entity_id or st.entity_id.endswith("_playlist_source"):
                 label = (st.state or "").strip()
-                if label in {"自动识别", "auto"}:
+                low = label.lower()
+                if label in {"自动识别", "auto"} or low == "auto":
                     source = "auto"
-                elif "QQ" in label or label == "tx":
+                elif "QQ" in label or low == "tx" or "(tx)" in low:
                     source = "tx"
+                elif "网易" in label or low == "wy" or "(wy)" in low:
+                    source = "wy"
+                elif "酷狗" in label or low == "kg" or "(kg)" in low:
+                    source = "kg"
+                elif "酷我" in label or low == "kw" or "(kw)" in low:
+                    source = "kw"
+                elif "咪咕" in label or low == "mg" or "(mg)" in low:
+                    source = "mg"
                 break
         try:
             pl = await import_playlist(backend._session, store, text, source)
