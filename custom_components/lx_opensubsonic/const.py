@@ -17,7 +17,7 @@ DEFAULT_MUSIC_SOURCE_JS_URL = (
 CONF_PREFERRED_QUALITY = "preferred_quality"
 DEFAULT_PREFERRED_QUALITY = "flac"
 
-PLATFORMS = ["sensor", "select", "button"]
+PLATFORMS = ["sensor", "select", "button", "text"]
 
 SEARCH_SOURCES = ["tx", "wy", "kg", "kw", "mg"]
 QUALITY_OPTIONS = ["flac", "320k", "128k", "flac24bit", "hires"]
@@ -40,3 +40,13 @@ QUALITY_SELECT_OPTIONS = [
 
 SEARCH_SOURCE_LABELS = {o["value"]: o["label"] for o in SEARCH_SOURCE_OPTIONS}
 QUALITY_LABELS = {o["value"]: o["label"] for o in QUALITY_SELECT_OPTIONS}
+
+# playlist import UI state keys (stored in entry data)
+CONF_PLAYLIST_INPUT = "playlist_input"
+CONF_PLAYLIST_SOURCE = "playlist_source"
+DEFAULT_PLAYLIST_SOURCE = "auto"
+PLAYLIST_SOURCE_OPTIONS = [
+    {"value": "auto", "label": "自动识别"},
+    {"value": "tx", "label": "QQ音乐 (tx)"},
+]
+PLAYLIST_SOURCE_LABELS = {o["value"]: o["label"] for o in PLAYLIST_SOURCE_OPTIONS}

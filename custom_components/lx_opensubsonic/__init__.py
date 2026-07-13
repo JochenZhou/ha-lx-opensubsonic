@@ -24,6 +24,8 @@ from .coordinator import LxOpenSubsonicCoordinator
 from .http_views import OpenSubsonicRootView, OpenSubsonicView
 from .music_backend import MusicBackend
 from .opensubsonic_api import OpenSubsonicAPI
+from .playlist_store import PlaylistStore
+from pathlib import Path
 
 _LOGGER = logging.getLogger(__name__)
 SERVICE_TEST_CONNECTION = "test_connection"
@@ -52,30 +54,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         music_source_js_url=music_source_js_url,
         preferred_quality=preferred_quality,
     )
-    api = OpenSubsonicAPI(backend, username=username, password=password)
+    store_path = Path(hass.config.path(f".storage/{DOMAIN}_playlists_{entry.entry_id}.json"))
+    playlist_store = PlaylistStore(store_path)
+    api = OpenSubsonicAPI(backend, username=username, password=password, playlist_store=playlist_store)
     coordinator = LxOpenSubsonicCoordinator(hass, entry, backend)
 
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = {
+    entry_data = {
         "api": api,
         "backend": backend,
         "coordinator": coordinator,
+        "playlist_store": playlist_store,
         "username": username,
         "password": password,
         "entry": entry,
-        "version": "0.5.2",
+        "version": "0.6.0",
     }
+    hass.data[DOMAIN][entry.entry_id] = entry_data
     hass.data[DOMAIN].update(
         {
             "api": api,
             "backend": backend,
+            "playlist_store": playlist_store,
             "username": username,
             "password": password,
             "search_source": search_source,
             "preferred_quality": preferred_quality,
             "music_source_js_url": music_source_js_url,
             "entry_id": entry.entry_id,
-            "version": "0.5.2",
+            "version": "0.6.0",
             "coordinator": coordinator,
         }
     )
@@ -129,6 +136,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "api",
             "backend",
             "coordinator",
+            "playlist_store",
             "username",
             "password",
             "search_source",

@@ -42,10 +42,11 @@ def parse_lrc(lrc: str) -> list[dict[str, Any]]:
 
 
 class OpenSubsonicAPI:
-    def __init__(self, backend: MusicBackend, username: str, password: str) -> None:
+    def __init__(self, backend: MusicBackend, username: str, password: str, playlist_store=None) -> None:
         self.backend = backend
         self.username = username
         self.password = password
+        self.playlist_store = playlist_store
 
     def ok(self, data: dict[str, Any] | None = None) -> dict[str, Any]:
         base = {
@@ -150,7 +151,7 @@ class OpenSubsonicAPI:
                         "settingsRole": True,
                         "downloadRole": True,
                         "uploadRole": False,
-                        "playlistRole": False,
+                        "playlistRole": True,
                         "coverArtRole": True,
                         "commentRole": False,
                         "podcastRole": False,
@@ -177,9 +178,9 @@ class OpenSubsonicAPI:
         if method in ("getAlbumList", "getAlbumList2"):
             return self.ok({"albumList2" if method.endswith("2") else "albumList": {"album": []}})
         if method in ("getPlaylists",):
-            return self.ok({"playlists": {"playlist": []}})
+            return await self._get_playlists(params)
         if method == "getPlaylist":
-            return self.fail(70, "Playlist not supported")
+            return await self._get_playlist(params)
         if method in ("getStarred", "getStarred2"):
             key = "starred2" if method.endswith("2") else "starred"
             return self.ok({key: {"song": [], "album": [], "artist": []}})
@@ -204,6 +205,29 @@ class OpenSubsonicAPI:
         if method == "getNowPlaying":
             return self.ok({"nowPlaying": {"entry": []}})
         return self.fail(0, f"Method not found: {method}")
+
+
+    async def _get_playlists(self, params: dict[str, str]) -> dict[str, Any]:
+        store = self.playlist_store
+        if not store:
+            return self.ok({"playlists": {"playlist": []}})
+        items = [p.to_subsonic(with_tracks=False) for p in store.list_playlists()]
+        return self.ok({"playlists": {"playlist": items}})
+
+    async def _get_playlist(self, params: dict[str, str]) -> dict[str, Any]:
+        pid = params.get("id") or ""
+        if not pid:
+            return self.fail(10, "Required parameter is missing: id")
+        store = self.playlist_store
+        if not store:
+            return self.fail(70, "Playlist not found")
+        pl = store.get(pid)
+        if not pl:
+            return self.fail(70, f"Playlist not found: {pid}")
+        # cache tracks into backend song cache for stream/lyrics/cover
+        for tr in pl.tracks:
+            self.backend.cache_song(tr.to_song())
+        return self.ok({"playlist": pl.to_subsonic(with_tracks=True)})
 
     async def _search(self, params: dict[str, str]) -> dict[str, Any]:
         """Search songs/albums/artists only. Playlists are not supported."""

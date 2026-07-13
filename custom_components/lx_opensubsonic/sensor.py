@@ -22,6 +22,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             LxStatusSensor(coordinator, entry, "cover_ok", "封面状态"),
             LxStatusSensor(coordinator, entry, "stream_ok", "播放取链状态"),
             LxStatusSensor(coordinator, entry, "js_ok", "音源JS状态"),
+            LxPlaylistCountSensor(coordinator, entry),
         ]
     )
 
@@ -57,6 +58,8 @@ class LxHealthSensor(_Base):
         data = self.coordinator.data or {}
         cfg = {**self._entry.data, **(self._entry.options or {})}
         sample = data.get("sample_song") or {}
+        store = self.hass.data.get(DOMAIN, {}).get(self._entry.entry_id, {}).get("playlist_store")
+        selected = store.selected() if store else None
         return {
             "search_ok": data.get("search_ok"),
             "cover_ok": data.get("cover_ok"),
@@ -69,6 +72,11 @@ class LxHealthSensor(_Base):
             "sample_song": f"{sample.get('artist', '')} - {sample.get('title', '')}".strip(" -"),
             "errors": data.get("errors") or [],
             "elapsed_ms": data.get("elapsed_ms") or {},
+            "imported_playlist_count": len(store.playlists) if store else 0,
+            "selected_playlist": selected.name if selected else "",
+            "selected_playlist_id": selected.id if selected else "",
+            "selected_song_count": selected.song_count if selected else 0,
+            "last_playlist_message": store.last_message if store else "",
         }
 
 
@@ -77,3 +85,25 @@ class LxStatusSensor(_Base):
     def native_value(self) -> str:
         data = self.coordinator.data or {}
         return "正常" if data.get(self._key) else "异常"
+
+
+class LxPlaylistCountSensor(_Base):
+    def __init__(self, coordinator: LxOpenSubsonicCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "playlist_count", "已导入歌单数")
+
+    @property
+    def native_value(self):
+        store = self.hass.data.get(DOMAIN, {}).get(self._entry.entry_id, {}).get("playlist_store")
+        return len(store.playlists) if store else 0
+
+    @property
+    def extra_state_attributes(self):
+        store = self.hass.data.get(DOMAIN, {}).get(self._entry.entry_id, {}).get("playlist_store")
+        selected = store.selected() if store else None
+        return {
+            "selected_playlist": selected.name if selected else "",
+            "selected_playlist_id": selected.id if selected else "",
+            "selected_song_count": selected.song_count if selected else 0,
+            "last_message": store.last_message if store else "",
+            "playlist_names": store.names() if store else [],
+        }
