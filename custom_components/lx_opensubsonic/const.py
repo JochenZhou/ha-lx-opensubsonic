@@ -3,11 +3,9 @@
 DOMAIN = "lx_opensubsonic"
 DEFAULT_USERNAME = "admin"
 
-# Default search platform
 CONF_SEARCH_SOURCE = "search_source"
 DEFAULT_SEARCH_SOURCE = "tx"
 
-# Third-party music source as JS URL. Key is parsed from script at runtime, never hard-coded.
 CONF_MUSIC_SOURCE_JS_URL = "music_source_js_url"
 DEFAULT_MUSIC_SOURCE_JS_URL = (
     "https://raw.githubusercontent.com/guoyue2010/lxmusic-/refs/heads/main/"
@@ -19,15 +17,11 @@ DEFAULT_MUSIC_SOURCE_JS_URL = (
 CONF_PREFERRED_QUALITY = "preferred_quality"
 DEFAULT_PREFERRED_QUALITY = "flac"
 
-# Only for online-search playlists (pl_tx_*): remap each song albumId/parent to song-level virtual id
-# so MA can resolve per-track covers. Default OFF.
-CONF_PLAYLIST_SONG_VIRTUAL_ALBUM = "playlist_song_virtual_album"
-DEFAULT_PLAYLIST_SONG_VIRTUAL_ALBUM = False
+PLATFORMS = ["sensor", "select", "button"]
 
 SEARCH_SOURCES = ["tx", "wy", "kg", "kw", "mg"]
 QUALITY_OPTIONS = ["flac", "320k", "128k", "flac24bit", "hires"]
 
-# UI labels (Chinese-first)
 SEARCH_SOURCE_OPTIONS = [
     {"value": "tx", "label": "QQ音乐 (tx)"},
     {"value": "wy", "label": "网易云音乐 (wy)"},
@@ -43,3 +37,6 @@ QUALITY_SELECT_OPTIONS = [
     {"value": "flac24bit", "label": "Hi-Res FLAC 24bit"},
     {"value": "hires", "label": "Hi-Res"},
 ]
+
+SEARCH_SOURCE_LABELS = {o["value"]: o["label"] for o in SEARCH_SOURCE_OPTIONS}
+QUALITY_LABELS = {o["value"]: o["label"] for o in QUALITY_SELECT_OPTIONS}

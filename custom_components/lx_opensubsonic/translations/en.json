@@ -3,73 +3,51 @@
     "step": {
       "user": {
         "title": "Add LX OpenSubsonic",
-        "description": "Configure an OpenSubsonic bridge for Music Assistant online music search and playback.",
+        "description": "配置后可供 Music Assistant 搜索和播放在线音乐。安装后可用实体切换搜索源和音质。",
         "data": {
-          "username": "Username",
-          "password": "Password",
-          "search_source": "Default search source",
-          "music_source_js_url": "Music source JS URL",
-          "preferred_quality": "Preferred quality",
-          "playlist_song_virtual_album": "Improve online playlist covers"
+          "username": "用户名",
+          "password": "密码",
+          "search_source": "默认搜索源",
+          "music_source_js_url": "音源 JS 链接",
+          "preferred_quality": "优先音质"
         },
         "data_description": {
-          "username": "Username used by Music Assistant to connect. Default: admin",
-          "password": "Password used by Music Assistant to connect. Default: password",
-          "search_source": "Default music platform for search.",
-          "music_source_js_url": "Music source script URL used to resolve playback links.",
-          "preferred_quality": "Preferred playback quality, with automatic fallback.",
-          "playlist_song_virtual_album": "Default off. Only affects online-search playlists. Helps song detail and now-playing covers."
+          "username": "Music Assistant 连接本集成时使用的用户名，默认 admin。",
+          "password": "Music Assistant 连接本集成时使用的密码，默认 password。",
+          "search_source": "初始默认搜索源，安装后可在实体中随时切换。",
+          "music_source_js_url": "用于解析播放链接的音源脚本地址。",
+          "preferred_quality": "初始优先音质，安装后可在实体中随时切换。"
         }
       },
       "reconfigure": {
         "title": "Reconfigure LX OpenSubsonic",
-        "description": "Update account, search source, music source URL and quality settings.",
+        "description": "仅修改连接账号和音源 JS 链接。搜索源/音质请用实体切换。",
         "data": {
-          "username": "Username",
-          "password": "Password",
-          "search_source": "Default search source",
-          "music_source_js_url": "Music source JS URL",
-          "preferred_quality": "Preferred quality",
-          "playlist_song_virtual_album": "Improve online playlist covers"
+          "username": "用户名",
+          "password": "密码",
+          "music_source_js_url": "音源 JS 链接"
         },
         "data_description": {
-          "username": "Username used by Music Assistant to connect.",
-          "password": "Password used by Music Assistant to connect.",
-          "search_source": "Default music platform for search.",
-          "music_source_js_url": "Music source script URL used to resolve playback links.",
-          "preferred_quality": "Preferred playback quality, with automatic fallback.",
-          "playlist_song_virtual_album": "Default off. Only affects online-search playlists. Helps song detail and now-playing covers."
+          "username": "Music Assistant 连接本集成时使用的用户名。",
+          "password": "Music Assistant 连接本集成时使用的密码。",
+          "music_source_js_url": "用于解析播放链接的音源脚本地址。"
         }
       }
     },
     "error": {
-      "cannot_connect": "Cannot connect",
-      "invalid_auth": "Invalid authentication",
-      "unknown": "Unknown error"
+      "cannot_connect": "无法连接",
+      "invalid_auth": "认证无效",
+      "unknown": "未知错误"
     },
     "abort": {
-      "already_configured": "LX OpenSubsonic is already configured",
-      "reconfigure_successful": "Reconfiguration successful"
+      "already_configured": "LX OpenSubsonic 已经配置过了",
+      "reconfigure_successful": "重新配置成功"
     }
   },
-  "options": {
-    "step": {
-      "init": {
-        "title": "LX OpenSubsonic options",
-        "description": "Changes reload automatically. No reinstall needed.",
-        "data": {
-          "search_source": "Default search source",
-          "music_source_js_url": "Music source JS URL",
-          "preferred_quality": "Preferred quality",
-          "playlist_song_virtual_album": "Improve online playlist covers"
-        },
-        "data_description": {
-          "search_source": "Default music platform for search.",
-          "music_source_js_url": "Music source script URL used to resolve playback links.",
-          "preferred_quality": "Preferred playback quality, with automatic fallback.",
-          "playlist_song_virtual_album": "Default off. Only affects online-search playlists. Helps song detail and now-playing covers."
-        }
-      }
+  "services": {
+    "test_connection": {
+      "name": "测试连接",
+      "description": "测试搜索、封面和播放取链是否正常，结果以通知显示。"
     }
   }
 }

@@ -3,42 +3,34 @@
     "step": {
       "user": {
         "title": "添加 LX OpenSubsonic",
-        "description": "配置后可供 Music Assistant 通过 OpenSubsonic 搜索和播放在线音乐。",
+        "description": "配置后可供 Music Assistant 搜索和播放在线音乐。安装后可用实体切换搜索源和音质。",
         "data": {
           "username": "用户名",
           "password": "密码",
           "search_source": "默认搜索源",
           "music_source_js_url": "音源 JS 链接",
-          "preferred_quality": "优先音质",
-          "playlist_song_virtual_album": "优化在线歌单封面显示"
+          "preferred_quality": "优先音质"
         },
         "data_description": {
           "username": "Music Assistant 连接本集成时使用的用户名，默认 admin。",
           "password": "Music Assistant 连接本集成时使用的密码，默认 password。",
-          "search_source": "搜索时默认使用的音乐平台。",
-          "music_source_js_url": "用于解析播放链接的音源脚本地址。可填写免费或你自己的音源 JS 链接。",
-          "preferred_quality": "播放时优先尝试的音质，失败会自动降级。",
-          "playlist_song_virtual_album": "默认关闭。开启后，仅对在线搜索打开的歌单生效，有助于歌曲详情和播放页显示真实封面。普通搜索歌曲/专辑不受影响。"
+          "search_source": "初始默认搜索源，安装后可在实体中随时切换。",
+          "music_source_js_url": "用于解析播放链接的音源脚本地址。",
+          "preferred_quality": "初始优先音质，安装后可在实体中随时切换。"
         }
       },
       "reconfigure": {
         "title": "重新配置 LX OpenSubsonic",
-        "description": "更新连接账号、搜索源、音源链接和音质等设置。",
+        "description": "仅修改连接账号和音源 JS 链接。搜索源/音质请用实体切换。",
         "data": {
           "username": "用户名",
           "password": "密码",
-          "search_source": "默认搜索源",
-          "music_source_js_url": "音源 JS 链接",
-          "preferred_quality": "优先音质",
-          "playlist_song_virtual_album": "优化在线歌单封面显示"
+          "music_source_js_url": "音源 JS 链接"
         },
         "data_description": {
           "username": "Music Assistant 连接本集成时使用的用户名。",
           "password": "Music Assistant 连接本集成时使用的密码。",
-          "search_source": "搜索时默认使用的音乐平台。",
-          "music_source_js_url": "用于解析播放链接的音源脚本地址。",
-          "preferred_quality": "播放时优先尝试的音质，失败会自动降级。",
-          "playlist_song_virtual_album": "默认关闭。开启后，仅对在线搜索打开的歌单生效，有助于歌曲详情和播放页显示真实封面。"
+          "music_source_js_url": "用于解析播放链接的音源脚本地址。"
         }
       }
     },
@@ -52,24 +44,10 @@
       "reconfigure_successful": "重新配置成功"
     }
   },
-  "options": {
-    "step": {
-      "init": {
-        "title": "LX OpenSubsonic 选项",
-        "description": "修改后会自动重新加载，无需重装集成。",
-        "data": {
-          "search_source": "默认搜索源",
-          "music_source_js_url": "音源 JS 链接",
-          "preferred_quality": "优先音质",
-          "playlist_song_virtual_album": "优化在线歌单封面显示"
-        },
-        "data_description": {
-          "search_source": "搜索时默认使用的音乐平台。",
-          "music_source_js_url": "用于解析播放链接的音源脚本地址。",
-          "preferred_quality": "播放时优先尝试的音质，失败会自动降级。",
-          "playlist_song_virtual_album": "默认关闭。开启后，仅对在线搜索打开的歌单生效，有助于歌曲详情和播放页显示真实封面。"
-        }
-      }
+  "services": {
+    "test_connection": {
+      "name": "测试连接",
+      "description": "测试搜索、封面和播放取链是否正常，结果以通知显示。"
     }
   }
 }

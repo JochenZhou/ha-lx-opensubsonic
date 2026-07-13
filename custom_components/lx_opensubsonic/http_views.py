@@ -26,7 +26,7 @@ class OpenSubsonicView(HomeAssistantView):
     async def _handle(self, request: web.Request, method: str) -> web.StreamResponse:
         hass = request.app["hass"]
         data = hass.data.get(DOMAIN)
-        if not data:
+        if not data or not data.get("api"):
             return web.json_response(
                 {
                     "subsonic-response": {
@@ -44,7 +44,6 @@ class OpenSubsonicView(HomeAssistantView):
         if request.can_read_body:
             body = await request.text()
         params = api.merge_params(query, body, request.headers.get("Content-Type"))
-
         method_name = method or _method_from_path(str(request.rel_url.path))
         method_name = method_name.split("?")[0].rstrip("/")
 
@@ -68,9 +67,7 @@ class OpenSubsonicView(HomeAssistantView):
             url = await data["backend"].resolve_stream_url(song_id)
             if url:
                 raise web.HTTPFound(location=url)
-            return web.json_response(
-                api.fail(0, "No stream URL. Configure music_source_js_url.")
-            )
+            return web.json_response(api.fail(0, "No stream URL. Configure music_source_js_url."))
 
         return web.json_response(result)
 
@@ -93,17 +90,24 @@ class OpenSubsonicRootView(HomeAssistantView):
         return web.json_response(
             {
                 "name": "LX OpenSubsonic",
-                "version": "0.3.0",
+                "version": data.get("version", "0.5.2"),
                 "rest_base": f"{request.scheme}://{request.host}/api/lx_opensubsonic/rest",
-                "configured": bool(data),
+                "configured": bool(data.get("api")),
                 "search_source": getattr(backend, "search_source", None) if backend else None,
                 "preferred_quality": getattr(backend, "preferred_quality", None) if backend else None,
                 "music_source_js": bool(getattr(backend, "music_source_js_url", "") if backend else ""),
+                "entities": {
+                    "search_source": "select.lx_opensubsonic_default_search_source_or_similar",
+                    "quality": "select....",
+                    "health": "sensor....",
+                    "test": "button....",
+                },
                 "usage": {
                     "music_assistant": {
                         "base_url": f"{request.scheme}://{request.host}/api/lx_opensubsonic",
                         "path": "/rest",
-                    }
+                    },
+                    "test_service": "lx_opensubsonic.test_connection",
                 },
             }
         )

@@ -1,0 +1,4 @@
+test_connection:
+  name: 测试连接
+  description: 测试搜索、封面和播放取链是否正常，结果以通知显示。
+  fields: {}

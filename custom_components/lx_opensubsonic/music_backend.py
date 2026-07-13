@@ -123,10 +123,13 @@ class Song:
     extra: dict[str, Any] = field(default_factory=dict)
 
     def to_child(self) -> dict[str, Any]:
-        # Always use song id as coverArt so MA resolves per-track art via getCoverArt,
-        # instead of inheriting playlist/album cover.
-        cover = self.id or "logo"
-        # Keep song under its own album id, but avoid parent=playlist id.
+        # Prefer direct cover URL; else album id / song id for getCoverArt.
+        if is_valid_cover_url(self.cover):
+            cover = self.cover
+        elif self.album_id:
+            cover = self.album_id
+        else:
+            cover = self.id or "logo"
         parent = self.album_id or self.id
         return {
             "id": self.id,
@@ -152,35 +155,6 @@ class Song:
         }
 
 
-@dataclass
-class Playlist:
-    id: str
-    name: str
-    owner: str = "TX"
-    cover: str = ""
-    song_count: int = 0
-    created: str = ""
-    comment: str = ""
-    source: str = "tx"
-    dissid: str = ""
-
-    def to_subsonic(self, songs: list[Song] | None = None) -> dict[str, Any]:
-        cover = self.cover if is_valid_cover_url(self.cover) else self.id
-        data: dict[str, Any] = {
-            "id": self.id,
-            "name": self.name,
-            "owner": self.owner or "TX",
-            "public": True,
-            "songCount": self.song_count if songs is None else len(songs),
-            "duration": sum(s.duration for s in (songs or [])),
-            "created": self.created or "1970-01-01T00:00:00Z",
-            "coverArt": cover,
-            "comment": self.comment or "",
-        }
-        if songs is not None:
-            data["entry"] = [s.to_child() for s in songs]
-        return data
-
 
 class MusicBackend:
 
@@ -197,8 +171,6 @@ class MusicBackend:
         self.preferred_quality = preferred_quality or "flac"
         self.song_cache: dict[str, Song] = {}
         self.cover_cache: dict[str, str] = {}
-        self.playlist_cache: dict[str, Playlist] = {}
-        self.playlist_songs_cache: dict[str, list[Song]] = {}
         self._timeout = ClientTimeout(total=20)
         self._source_cache: dict[str, Any] = {"url": None, "api_url": "", "api_key": "", "ts": 0}
 
@@ -344,164 +316,8 @@ class MusicBackend:
             songs.append(song)
         return songs
 
-    async def search_tx_playlists(self, query: str, limit: int = 20) -> list[Playlist]:
-        """Search QQ Music playlists (歌单)."""
-        if not query:
-            return []
-        payload = {
-            "comm": {"ct": 19, "cv": 1859, "uin": "0"},
-            "req": {
-                "method": "DoSearchForQQMusicDesktop",
-                "module": "music.search.SearchCgiService",
-                "param": {
-                    "query": query,
-                    "page_num": 1,
-                    "num_per_page": max(1, min(limit, 30)),
-                    "search_type": 3,
-                },
-            },
-        }
-        try:
-            data = await self._json_post("https://u.y.qq.com/cgi-bin/musicu.fcg", payload)
-            body = (((data.get("req") or {}).get("data") or {}).get("body")) or {}
-            items = ((body.get("songlist") or {}).get("list")) or []
-        except Exception as err:
-            _LOGGER.warning("TX playlist search failed: %s", err)
-            return []
 
-        playlists: list[Playlist] = []
-        for item in items:
-            dissid = str(item.get("dissid") or item.get("id") or "")
-            if not dissid:
-                continue
-            creator = item.get("creator") or {}
-            owner = creator.get("name") or "TX"
-            cover = item.get("imgurl") or item.get("logo") or ""
-            created = item.get("createtime") or item.get("createTime") or "1970-01-01"
-            if created and "T" not in str(created):
-                created = f"{created}T00:00:00Z"
-            pl = Playlist(
-                id=f"pl_tx_{dissid}",
-                name=item.get("dissname") or item.get("name") or f"歌单{dissid}",
-                owner=owner,
-                cover=cover if is_valid_cover_url(cover) else "",
-                song_count=int(item.get("song_count") or item.get("songnum") or 0),
-                created=str(created),
-                comment=str(item.get("introduction") or item.get("desc") or "")[:200],
-                source="tx",
-                dissid=dissid,
-            )
-            self.playlist_cache[pl.id] = pl
-            if is_valid_cover_url(pl.cover):
-                self.cover_cache[pl.id] = pl.cover
-            playlists.append(pl)
-        return playlists
 
-    async def get_playlist(self, playlist_id: str) -> tuple[Playlist | None, list[Song]]:
-        """Get playlist metadata + songs. Currently TX only (pl_tx_*)."""
-        if playlist_id in self.playlist_songs_cache and playlist_id in self.playlist_cache:
-            return self.playlist_cache[playlist_id], self.playlist_songs_cache[playlist_id]
-
-        dissid = ""
-        if playlist_id.startswith("pl_tx_"):
-            dissid = playlist_id[len("pl_tx_") :]
-        elif playlist_id.isdigit():
-            dissid = playlist_id
-            playlist_id = f"pl_tx_{dissid}"
-        else:
-            return self.playlist_cache.get(playlist_id), self.playlist_songs_cache.get(playlist_id, [])
-
-        url = (
-            "https://c.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg"
-            f"?type=1&json=1&utf8=1&onlysong=0&new_format=1&disstid={dissid}"
-            "&loginUin=0&hostUin=0&format=json&inCharset=utf8&outCharset=utf-8"
-            "&notice=0&platform=yqq.json&needNewCode=0"
-        )
-        try:
-            async with self._session.get(
-                url,
-                headers={
-                    "User-Agent": UA,
-                    "Referer": f"https://y.qq.com/n/ryqq/playlist/{dissid}",
-                },
-                timeout=self._timeout,
-            ) as resp:
-                data = await resp.json(content_type=None)
-        except Exception as err:
-            _LOGGER.warning("TX playlist detail failed %s: %s", playlist_id, err)
-            return self.playlist_cache.get(playlist_id), []
-
-        cdlist = data.get("cdlist") or []
-        if not cdlist:
-            return self.playlist_cache.get(playlist_id), []
-        cd = cdlist[0]
-        cover = cd.get("logo") or cd.get("imgurl") or ""
-        owner = cd.get("nickname") or (cd.get("creator") or {}).get("name") or "TX"
-        pl = Playlist(
-            id=playlist_id,
-            name=cd.get("dissname") or cd.get("diss_name") or f"歌单{dissid}",
-            owner=owner,
-            cover=cover if is_valid_cover_url(cover) else "",
-            song_count=int(cd.get("songnum") or len(cd.get("songlist") or []) or 0),
-            created=str(cd.get("ctime") or cd.get("createtime") or "1970-01-01T00:00:00Z"),
-            comment=str(cd.get("desc") or "")[:200],
-            source="tx",
-            dissid=dissid,
-        )
-        songs: list[Song] = []
-        for item in cd.get("songlist") or []:
-            mid = item.get("mid") or item.get("songmid")
-            if not mid:
-                continue
-            album = item.get("album") or {}
-            album_mid = album.get("mid") or ""
-            album_name = album.get("name") or "Unknown Album"
-            singers = item.get("singer") or []
-            artist = "、".join([s.get("name", "") for s in singers if s.get("name")]) or "Unknown"
-            # Prefer album cover only. Never reuse playlist cover for every track.
-            sc = ""
-            album_pmid = album.get("pmid") or ""
-            if album_mid and album_mid != "空":
-                sc = f"https://y.gtimg.cn/music/photo_new/T002R500x500M000{album_mid}.jpg"
-            elif album_pmid:
-                # some payloads only provide pmid
-                mid2 = str(album_pmid).split("_")[0]
-                if mid2 and mid2 != "空":
-                    sc = f"https://y.gtimg.cn/music/photo_new/T002R500x500M000{mid2}.jpg"
-            if not is_valid_cover_url(sc) and singers and singers[0].get("mid"):
-                sc = f"https://y.gtimg.cn/music/photo_new/T001R500x500M000{singers[0]['mid']}.jpg"
-            file_info = item.get("file") or {}
-            is_flac = bool(file_info.get("size_flac"))
-            song = Song(
-                id=f"tx_{mid}",
-                title=item.get("title") or item.get("name") or "Unknown",
-                artist=artist,
-                album=album_name,
-                # Keep album_id as real album, but never playlist id.
-                album_id=f"alb_tx_{album_mid}" if album_mid else f"tx_{mid}",
-                artist_id=f"artist_{artist.split('、')[0]}",
-                # Song-own cover URL used by getCoverArt(tx_mid). Never playlist cover.
-                cover=sc if is_valid_cover_url(sc) else "",
-                duration=int(item.get("interval") or 0),
-                source="tx",
-                songmid=mid,
-                parent=f"alb_tx_{album_mid}" if album_mid else f"tx_{mid}",
-                bitrate=999 if is_flac else 320,
-                suffix="flac" if is_flac else "mp3",
-                content_type="audio/flac" if is_flac else "audio/mpeg",
-                extra={"album_mid": album_mid, "media_mid": file_info.get("media_mid"), "playlist_id": playlist_id},
-            )
-            self.cache_song(song)
-            songs.append(song)
-        pl.song_count = len(songs) or pl.song_count
-        self.playlist_cache[playlist_id] = pl
-        self.playlist_songs_cache[playlist_id] = songs
-        if is_valid_cover_url(pl.cover):
-            self.cover_cache[playlist_id] = pl.cover
-        return pl, songs
-
-    async def list_playlists(self) -> list[Playlist]:
-        return list(self.playlist_cache.values())
 
     async def search_kg(self, query: str, limit: int = 20) -> list[Song]:
 
@@ -681,7 +497,7 @@ class MusicBackend:
                 bitrate=320,
                 suffix="mp3",
                 content_type="audio/mpeg",
-                extra={"copyrightId": copyright_id},
+                extra={"copyrightId": copyright_id, "lrcUrl": item.get("lyricUrl") or item.get("lrcUrl") or ""},
             )
             self.cache_song(song)
             songs.append(song)
@@ -798,23 +614,134 @@ class MusicBackend:
             self.cache_song(song)
             return song
 
-        # non-tx: reconstruct from id prefix if possible via search is weak; return cache-only miss
-        for prefix, src in (("kg_", "kg"), ("kw_", "kw"), ("mg_", "mg"), ("wy_", "wy")):
-            if song_id.startswith(prefix):
-                # create minimal shell so stream can still use songmid
-                mid = song_id[len(prefix) :]
+        # non-tx: resolve via source-specific detail/search instead of bare shell
+        if song_id.startswith("wy_"):
+            return await self._get_song_wy(song_id)
+        if song_id.startswith("kg_"):
+            return await self._get_song_kg(song_id)
+        if song_id.startswith("kw_"):
+            return await self._get_song_kw(song_id)
+        if song_id.startswith("mg_"):
+            return await self._get_song_mg(song_id)
+        return None
+
+    async def _get_song_wy(self, song_id: str) -> Song | None:
+        sid = song_id[3:]
+        # detail by id
+        try:
+            data = await self._json_get(
+                "https://music.163.com/api/song/detail",
+                params={"ids": f"[{sid}]"},
+                headers={"User-Agent": UA, "Referer": "https://music.163.com/"},
+            )
+            songs = data.get("songs") or []
+            if songs:
+                item = songs[0]
+                artists = item.get("artists") or item.get("ar") or []
+                artist = "、".join([a.get("name", "") for a in artists if a.get("name")]) or "Unknown"
+                al = item.get("album") or item.get("al") or {}
+                album_name = al.get("name") or "Unknown Album"
+                album_id = str(al.get("id") or "")
+                cover = al.get("picUrl") or ""
+                duration = int((item.get("duration") or item.get("dt") or 0) / 1000)
                 song = Song(
-                    id=song_id,
-                    title=mid,
-                    artist="Unknown",
-                    source=src,
-                    songmid=mid,
-                    album_id=song_id,
-                    parent=song_id,
+                    id=f"wy_{sid}",
+                    title=item.get("name") or "Unknown",
+                    artist=artist,
+                    album=album_name,
+                    album_id=f"alb_wy_{album_id}" if album_id else f"wy_{sid}",
+                    artist_id=f"artist_{artist.split('、')[0]}",
+                    cover=cover if is_valid_cover_url(cover) else "",
+                    duration=duration,
+                    source="wy",
+                    songmid=sid,
+                    parent=f"alb_wy_{album_id}" if album_id else f"wy_{sid}",
+                    bitrate=320,
+                    suffix="mp3",
+                    content_type="audio/mpeg",
                 )
                 self.cache_song(song)
                 return song
+        except Exception as err:
+            _LOGGER.warning("WY get_song failed %s: %s", song_id, err)
+        # fallback search by id text
+        hits = await self.search_wy(sid, limit=10)
+        for h in hits:
+            if h.songmid == sid or h.id == song_id:
+                return h
         return None
+
+    async def _get_song_kg(self, song_id: str) -> Song | None:
+        mid = song_id[3:]
+        # Prefer search by hash/id
+        hits = await self.search_kg(mid, limit=10)
+        for h in hits:
+            if h.songmid == mid or h.id == song_id or (h.extra or {}).get("hash") == mid:
+                return h
+        # minimal shell with hash for lyric/stream
+        song = Song(
+            id=song_id,
+            title=mid,
+            artist="Unknown",
+            source="kg",
+            songmid=mid,
+            album_id=song_id,
+            parent=song_id,
+            extra={"hash": mid},
+        )
+        self.cache_song(song)
+        return song
+
+    async def _get_song_kw(self, song_id: str) -> Song | None:
+        rid = song_id[3:]
+        hits = await self.search_kw(rid, limit=10)
+        for h in hits:
+            if h.songmid == rid or h.id == song_id:
+                return h
+        # try info endpoint for cover/title
+        try:
+            data = await self._json_get(
+                f"http://www.kuwo.cn/api/www/music/musicInfo?mid={rid}",
+                headers={"User-Agent": UA, "Referer": "https://www.kuwo.cn/"},
+            )
+            d = (data.get("data") or {}) if isinstance(data, dict) else {}
+            if d:
+                title = d.get("name") or d.get("songName") or rid
+                artist = d.get("artist") or d.get("artistName") or "Unknown"
+                album = d.get("album") or "Unknown Album"
+                album_id = str(d.get("albumid") or d.get("albumId") or "")
+                cover = d.get("pic") or d.get("albumpic") or ""
+                duration = parse_duration(d.get("duration") or d.get("songTimeMinutes") or 0)
+                song = Song(
+                    id=f"kw_{rid}",
+                    title=title,
+                    artist=artist,
+                    album=album,
+                    album_id=f"alb_kw_{album_id}" if album_id else f"kw_{rid}",
+                    artist_id=f"artist_{artist.split('&')[0].split('、')[0]}",
+                    cover=cover if is_valid_cover_url(cover) else "",
+                    duration=duration,
+                    source="kw",
+                    songmid=rid,
+                    parent=f"alb_kw_{album_id}" if album_id else f"kw_{rid}",
+                )
+                self.cache_song(song)
+                return song
+        except Exception as err:
+            _LOGGER.warning("KW get_song failed %s: %s", song_id, err)
+        song = Song(id=song_id, title=rid, artist="Unknown", source="kw", songmid=rid, album_id=song_id, parent=song_id)
+        self.cache_song(song)
+        return song
+
+    async def _get_song_mg(self, song_id: str) -> Song | None:
+        mid = song_id[3:]
+        hits = await self.search_mg(mid, limit=10)
+        for h in hits:
+            if h.songmid == mid or h.id == song_id:
+                return h
+        song = Song(id=song_id, title=mid, artist="Unknown", source="mg", songmid=mid, album_id=song_id, parent=song_id)
+        self.cache_song(song)
+        return song
 
     async def get_album_songs(self, album_id: str) -> tuple[str, list[Song]]:
         cached = [s for s in self.song_cache.values() if s.album_id == album_id]
@@ -826,43 +753,163 @@ class MusicBackend:
         return "Album", []
 
     async def get_lyrics(self, song_id: str, *, fetch: bool = True) -> str:
-        """Return lyrics. fetch=False makes an instant empty result (used for bulk album loads)."""
+        """Return lyrics for tx/wy/kg/kw/mg. fetch=False returns empty immediately."""
         if not fetch:
             return ""
         song = await self.get_song(song_id)
         if not song:
             return ""
-        if song.source == "tx":
+        try:
+            if song.source == "tx":
+                return await self._lyrics_tx(song)
+            if song.source == "wy":
+                return await self._lyrics_wy(song)
+            if song.source == "kg":
+                return await self._lyrics_kg(song)
+            if song.source == "kw":
+                return await self._lyrics_kw(song)
+            if song.source == "mg":
+                return await self._lyrics_mg(song)
+        except Exception as err:
+            _LOGGER.warning("lyric failed %s/%s: %s", song.source, song_id, err)
+        return ""
+
+    async def _lyrics_tx(self, song: Song) -> str:
+        url = "https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg"
+        params = {
+            "songmid": song.songmid,
+            "pcachetime": str(int(time.time() * 1000)),
+            "g_tk": "5381",
+            "loginUin": "0",
+            "hostUin": "0",
+            "format": "json",
+            "inCharset": "utf8",
+            "outCharset": "utf-8",
+            "notice": "0",
+            "platform": "yqq",
+            "needNewCode": "0",
+        }
+        async with self._session.get(
+            url,
+            params=params,
+            headers={"User-Agent": UA, "Referer": "https://y.qq.com/"},
+            timeout=self._timeout,
+        ) as resp:
+            data = await resp.json(content_type=None)
+        lyric_b64 = data.get("lyric") or ""
+        if not lyric_b64:
+            return ""
+        return base64.b64decode(lyric_b64).decode("utf-8", errors="ignore")
+
+    async def _lyrics_wy(self, song: Song) -> str:
+        sid = song.songmid or song.id.replace("wy_", "", 1)
+        headers = {"User-Agent": UA, "Referer": "https://music.163.com/"}
+        # primary
+        async with self._session.get(
+            "https://music.163.com/api/song/lyric",
+            params={"id": sid, "lv": 1, "kv": 1, "tv": -1},
+            headers=headers,
+            timeout=self._timeout,
+        ) as resp:
+            data = await resp.json(content_type=None)
+        lyric = ((data.get("lrc") or {}).get("lyric")) or ""
+        if lyric.strip():
+            return lyric
+        # fallback media endpoint
+        async with self._session.get(
+            "https://music.163.com/api/song/media",
+            params={"id": sid},
+            headers=headers,
+            timeout=self._timeout,
+        ) as resp:
+            data = await resp.json(content_type=None)
+        return (data.get("lyric") or "").strip()
+
+    async def _lyrics_kg(self, song: Song) -> str:
+        song_hash = (song.extra or {}).get("hash") or song.songmid
+        if not song_hash:
+            return ""
+        # duration for kugou lyric search is milliseconds
+        duration_ms = int(song.duration or 0) * 1000
+        search_url = (
+            "http://lyrics.kugou.com/search?ver=1&man=yes&client=pc"
+            f"&keyword={quote(song.title)}&hash={song_hash}&timelength={duration_ms}&lrctxt=1"
+        )
+        headers = {
+            "KG-RC": "1",
+            "KG-THash": "expand_search_manager.cpp:852736169:451",
+            "User-Agent": "KuGou2012-9020-ExpandSearchManager",
+        }
+        async with self._session.get(search_url, headers=headers, timeout=self._timeout) as resp:
+            data = await resp.json(content_type=None)
+        cands = data.get("candidates") or []
+        if not cands:
+            return ""
+        cand = cands[0]
+        cid = cand.get("id")
+        access_key = cand.get("accesskey")
+        if not cid or not access_key:
+            return ""
+        # Prefer plain LRC for MA compatibility
+        down_url = (
+            "http://lyrics.kugou.com/download?ver=1&client=pc"
+            f"&id={cid}&accesskey={access_key}&fmt=lrc&charset=utf8"
+        )
+        async with self._session.get(down_url, headers=headers, timeout=self._timeout) as resp:
+            body = await resp.json(content_type=None)
+        content = body.get("content") or ""
+        if not content:
+            return ""
+        if (body.get("fmt") or "lrc") == "lrc":
+            return base64.b64decode(content).decode("utf-8", errors="ignore")
+        return ""
+
+    async def _lyrics_kw(self, song: Song) -> str:
+        rid = song.songmid or song.id.replace("kw_", "", 1)
+        if not rid:
+            return ""
+        # Best-effort endpoints; some networks may block.
+        urls = [
+            f"https://m.kuwo.cn/newh5/singles/songinfoandlrc?musicId={rid}",
+            f"http://m.kuwo.cn/newh5/singles/songinfoandlrc?musicId={rid}",
+        ]
+        for url in urls:
             try:
-                url = "https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg"
-                params = {
-                    "songmid": song.songmid,
-                    "pcachetime": str(int(time.time() * 1000)),
-                    "g_tk": "5381",
-                    "loginUin": "0",
-                    "hostUin": "0",
-                    "format": "json",
-                    "inCharset": "utf8",
-                    "outCharset": "utf-8",
-                    "notice": "0",
-                    "platform": "yqq",
-                    "needNewCode": "0",
-                }
                 async with self._session.get(
                     url,
-                    params=params,
-                    headers={"User-Agent": UA, "Referer": "https://y.qq.com/"},
+                    headers={"User-Agent": UA, "Referer": "https://www.kuwo.cn/"},
                     timeout=self._timeout,
                 ) as resp:
                     data = await resp.json(content_type=None)
-                lyric_b64 = data.get("lyric") or ""
-                if not lyric_b64:
-                    return ""
-                return base64.b64decode(lyric_b64).decode("utf-8", errors="ignore")
-            except Exception as err:
-                _LOGGER.warning("lyric failed %s: %s", song_id, err)
-                return ""
-        # other sources: empty ok (MA tolerates empty lyrics)
+                lrc_list = ((data.get("data") or {}).get("lrclist")) or []
+                if not lrc_list:
+                    continue
+                lines = []
+                for item in lrc_list:
+                    tsec = item.get("time")
+                    line = item.get("lineLyric") or ""
+                    try:
+                        sec = float(tsec)
+                        m = int(sec // 60)
+                        s = sec - m * 60
+                        lines.append(f"[{m:02d}:{s:05.2f}]{line}")
+                    except Exception:
+                        if line:
+                            lines.append(line)
+                if lines:
+                    return "\n".join(lines)
+            except Exception:
+                continue
+        return ""
+
+    async def _lyrics_mg(self, song: Song) -> str:
+        lrc_url = (song.extra or {}).get("lrcUrl") or (song.extra or {}).get("lyricUrl") or ""
+        if lrc_url:
+            async with self._session.get(lrc_url, headers={"User-Agent": UA}, timeout=self._timeout) as resp:
+                text = await resp.text()
+            if text and "code" not in text[:30]:
+                return text
+        # Some search payloads only have copyrightId/contentId; no stable lyric API here.
         return ""
 
     async def _ensure_music_source_from_js(self) -> tuple[str, str]:
@@ -976,22 +1023,17 @@ class MusicBackend:
         elif cover_id.startswith("alb_tx_"):
             mid = cover_id.replace("alb_tx_", "", 1)
             url = f"https://y.gtimg.cn/music/photo_new/T002R500x500M000{mid}.jpg"
-        elif cover_id.startswith("tx_"):
-            song = await self.get_song(cover_id)
-            if song and is_valid_cover_url(song.cover):
-                url = song.cover
-            elif song and song.songmid:
-                # last resort: QQ album-less song still may have mid-based album art unknown;
-                # keep empty rather than playlist cover.
-                url = None
-        elif cover_id.startswith("pl_tx_"):
-            pl, _ = await self.get_playlist(cover_id)
-            if pl and is_valid_cover_url(pl.cover):
-                url = pl.cover
-        else:
-            song = self.song_cache.get(cover_id)
-            if song and is_valid_cover_url(song.cover):
-                url = song.cover
+        elif cover_id.startswith(("tx_", "wy_", "kg_", "kw_", "mg_", "alb_wy_", "alb_kg_", "alb_kw_", "alb_mg_")):
+            # Resolve via song/album cache detail for all sources
+            if cover_id.startswith("alb_"):
+                # try any cached song under this album
+                songs = [s for s in self.song_cache.values() if s.album_id == cover_id]
+                if songs and is_valid_cover_url(songs[0].cover):
+                    url = songs[0].cover
+            else:
+                song = await self.get_song(cover_id)
+                if song and is_valid_cover_url(song.cover):
+                    url = song.cover
 
         if not is_valid_cover_url(url):
             return None
@@ -1009,3 +1051,85 @@ class MusicBackend:
         except Exception as err:
             _LOGGER.warning("cover fetch failed %s: %s", cover_id, err)
             return None
+
+
+    async def health_check(self) -> dict[str, Any]:
+        """Quick health diagnostics for UI/API."""
+        import time as _time
+        result: dict[str, Any] = {
+            "search_source": self.search_source,
+            "preferred_quality": self.preferred_quality,
+            "music_source_js_url": bool(self.music_source_js_url),
+            "search_ok": False,
+            "stream_ok": False,
+            "cover_ok": False,
+            "js_ok": False,
+            "sample_song": None,
+            "errors": [],
+            "elapsed_ms": {},
+        }
+        # JS parse
+        t0 = _time.time()
+        try:
+            api_url, api_key = await self._ensure_music_source_from_js()
+            result["js_ok"] = bool(api_url)
+            result["js_api_ready"] = bool(api_url)
+            result["js_key_ready"] = bool(api_key)
+            if not api_url and self.music_source_js_url:
+                result["errors"].append("音源 JS 未能解析出可用取链地址")
+        except Exception as err:
+            result["errors"].append(f"音源 JS 检查失败: {err}")
+        result["elapsed_ms"]["js"] = int((_time.time() - t0) * 1000)
+
+        # search
+        t0 = _time.time()
+        songs: list[Song] = []
+        try:
+            songs = await self.search("周杰伦", limit=1)
+            result["search_ok"] = bool(songs)
+            if songs:
+                s0 = songs[0]
+                result["sample_song"] = {
+                    "id": s0.id,
+                    "title": s0.title,
+                    "artist": s0.artist,
+                    "cover": s0.cover if is_valid_cover_url(s0.cover) else "",
+                }
+            else:
+                result["errors"].append("搜索无结果")
+        except Exception as err:
+            result["errors"].append(f"搜索失败: {err}")
+        result["elapsed_ms"]["search"] = int((_time.time() - t0) * 1000)
+
+        # cover
+        t0 = _time.time()
+        try:
+            if songs:
+                cover_id = songs[0].cover if is_valid_cover_url(songs[0].cover) else songs[0].id
+                img = await self.fetch_cover_bytes(cover_id)
+                result["cover_ok"] = bool(img and img[0])
+                if not result["cover_ok"]:
+                    result["errors"].append("封面获取失败")
+            else:
+                result["errors"].append("跳过封面检查：无搜索结果")
+        except Exception as err:
+            result["errors"].append(f"封面检查失败: {err}")
+        result["elapsed_ms"]["cover"] = int((_time.time() - t0) * 1000)
+
+        # stream
+        t0 = _time.time()
+        try:
+            if songs:
+                url = await self.resolve_stream_url(songs[0].id)
+                result["stream_ok"] = bool(url)
+                result["stream_url_preview"] = (url or "")[:120]
+                if not url:
+                    result["errors"].append("播放取链失败，请检查音源 JS 链接")
+            else:
+                result["errors"].append("跳过播放检查：无搜索结果")
+        except Exception as err:
+            result["errors"].append(f"播放检查失败: {err}")
+        result["elapsed_ms"]["stream"] = int((_time.time() - t0) * 1000)
+
+        result["ok"] = bool(result["search_ok"] and (result["stream_ok"] or not self.music_source_js_url))
+        return result

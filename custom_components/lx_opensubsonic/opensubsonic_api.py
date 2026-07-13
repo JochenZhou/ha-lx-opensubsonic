@@ -42,18 +42,10 @@ def parse_lrc(lrc: str) -> list[dict[str, Any]]:
 
 
 class OpenSubsonicAPI:
-    def __init__(
-        self,
-        backend: MusicBackend,
-        username: str,
-        password: str,
-        playlist_song_virtual_album: bool = False,
-    ) -> None:
+    def __init__(self, backend: MusicBackend, username: str, password: str) -> None:
         self.backend = backend
         self.username = username
         self.password = password
-        # Only affects online-search playlists (pl_tx_*). Default False.
-        self.playlist_song_virtual_album = bool(playlist_song_virtual_album)
 
     def ok(self, data: dict[str, Any] | None = None) -> dict[str, Any]:
         base = {
@@ -158,7 +150,7 @@ class OpenSubsonicAPI:
                         "settingsRole": True,
                         "downloadRole": True,
                         "uploadRole": False,
-                        "playlistRole": True,
+                        "playlistRole": False,
                         "coverArtRole": True,
                         "commentRole": False,
                         "podcastRole": False,
@@ -185,9 +177,9 @@ class OpenSubsonicAPI:
         if method in ("getAlbumList", "getAlbumList2"):
             return self.ok({"albumList2" if method.endswith("2") else "albumList": {"album": []}})
         if method in ("getPlaylists",):
-            return await self._get_playlists(params)
+            return self.ok({"playlists": {"playlist": []}})
         if method == "getPlaylist":
-            return await self._get_playlist(params)
+            return self.fail(70, "Playlist not supported")
         if method in ("getStarred", "getStarred2"):
             key = "starred2" if method.endswith("2") else "starred"
             return self.ok({key: {"song": [], "album": [], "artist": []}})
@@ -214,95 +206,72 @@ class OpenSubsonicAPI:
         return self.fail(0, f"Method not found: {method}")
 
     async def _search(self, params: dict[str, str]) -> dict[str, Any]:
+        """Search songs/albums/artists only. Playlists are not supported."""
         query = (params.get("query") or "").strip().strip('"').strip("'")
         song_count = max(0, int(params.get("songCount") or 20))
         album_count = max(0, int(params.get("albumCount") or 10))
         artist_count = max(0, int(params.get("artistCount") or 10))
-        songs = await self.backend.search(query, limit=max(song_count, 20)) if query else []
-        song_items = [s.to_child() for s in songs[:song_count]]
 
+        songs = await self.backend.search(query, limit=max(song_count, 20)) if query else []
+        song_items: list[dict[str, Any]] = []
         album_map: dict[str, dict[str, Any]] = {}
         artist_map: dict[str, dict[str, Any]] = {}
+
         for s in songs:
-            if s.album_id and s.album_id not in album_map:
-                album_map[s.album_id] = {
-                    "id": s.album_id,
-                    "name": s.album,
-                    "title": s.album,
+            cover_url = s.cover if is_valid_cover_url(s.cover) else ""
+            album_id = s.album_id or s.id
+            if album_id not in album_map:
+                album_map[album_id] = {
+                    "id": album_id,
+                    "name": s.album or s.title,
+                    "title": s.album or s.title,
                     "artist": s.artist,
                     "artistId": s.artist_id,
-                    "coverArt": s.cover if is_valid_cover_url(s.cover) else s.album_id,
+                    "coverArt": cover_url or album_id,
                     "songCount": 1,
                     "duration": s.duration,
                     "created": datetime.now(timezone.utc).isoformat(),
                     "isDir": True,
                 }
             else:
-                if s.album_id in album_map:
-                    album_map[s.album_id]["songCount"] += 1
-                    album_map[s.album_id]["duration"] += s.duration
+                album_map[album_id]["songCount"] += 1
+                album_map[album_id]["duration"] += s.duration
+                if cover_url and not is_valid_cover_url(album_map[album_id].get("coverArt")):
+                    album_map[album_id]["coverArt"] = cover_url
+
             aid = s.artist_id or f"artist_{s.artist.split('、')[0]}"
             if aid not in artist_map:
                 artist_map[aid] = {
                     "id": aid,
                     "name": s.artist.split("、")[0],
-                    "coverArt": s.cover if is_valid_cover_url(s.cover) else aid,
-                    "artistImageUrl": s.cover if is_valid_cover_url(s.cover) else None,
+                    "coverArt": cover_url or aid,
+                    "artistImageUrl": cover_url or None,
                     "albumCount": 0,
                     "songCount": 1,
                 }
             else:
                 artist_map[aid]["songCount"] += 1
 
-        # MA OpenSubsonic search only shows song/album/artist (not playlist).
-        # Map TX online playlists into searchResult3.album so they appear in MA online search.
-        playlist_albums: list[dict[str, Any]] = []
-        if query and getattr(self.backend, "search_source", "tx") == "tx" and album_count > 0:
-            try:
-                playlists = await self.backend.search_tx_playlists(query, limit=max(album_count, 10))
-                for pl in playlists:
-                    playlist_albums.append(
-                        {
-                            "id": pl.id,
-                            "name": f"[歌单] {pl.name}",
-                            "title": f"[歌单] {pl.name}",
-                            "artist": pl.owner or "TX歌单",
-                            "artistId": f"artist_{ (pl.owner or 'TX').split('、')[0] }",
-                            "coverArt": pl.cover if is_valid_cover_url(pl.cover) else pl.id,
-                            "songCount": pl.song_count or 0,
-                            "duration": 0,
-                            "created": pl.created or datetime.now(timezone.utc).isoformat(),
-                            "isDir": True,
-                        }
-                    )
-            except Exception:
-                playlist_albums = []
-
-        # Prefer playlists first in album bucket, then real albums.
-        albums = (playlist_albums + list(album_map.values()))[:album_count]
+        for s in songs[:song_count]:
+            child = s.to_child()
+            cover_url = s.cover if is_valid_cover_url(s.cover) else ""
+            album_id = s.album_id or s.id
+            child["albumId"] = album_id
+            child["parent"] = album_id
+            child["album"] = s.album or s.title
+            child["coverArt"] = cover_url or album_id or s.id
+            song_items.append(child)
 
         return self.ok(
             {
                 "searchResult3": {
                     "song": song_items,
-                    "album": albums,
+                    "album": list(album_map.values())[:album_count],
                     "artist": list(artist_map.values())[:artist_count],
                 }
             }
         )
 
-    async def _get_playlists(self, params: dict[str, str]) -> dict[str, Any]:
-        playlists = await self.backend.list_playlists()
-        return self.ok({"playlists": {"playlist": [p.to_subsonic() for p in playlists]}})
-
-    async def _get_playlist(self, params: dict[str, str]) -> dict[str, Any]:
-        pid = params.get("id") or ""
-        if not pid:
-            return self.fail(10, "Required parameter is missing: id")
-        pl, songs = await self.backend.get_playlist(pid)
-        if not pl:
-            return self.fail(70, f"Playlist not found: {pid}")
-        return self.ok({"playlist": pl.to_subsonic(songs)})
 
     async def _get_song(self, params: dict[str, str]) -> dict[str, Any]:
         sid = params.get("id")
@@ -317,82 +286,6 @@ class OpenSubsonicAPI:
         aid = params.get("id")
         if not aid:
             return self.fail(10, "Required parameter is missing: id")
-        # TX online playlist mapped as album in search
-        if str(aid).startswith("pl_tx_"):
-            pl, songs = await self.backend.get_playlist(str(aid))
-            if not pl:
-                return self.fail(70, f"Playlist not found: {aid}")
-            # Playlist cover only for the album object itself.
-            # Optional: remap each song albumId/parent to song-level virtual id (MA cover workaround).
-            song_items = []
-            for s in songs:
-                child = s.to_child()
-                # Prefer direct song cover URL; fallback to song id for getCoverArt.
-                # Never use playlist cover on tracks.
-                if is_valid_cover_url(s.cover):
-                    child["coverArt"] = s.cover
-                else:
-                    child["coverArt"] = s.id
-                if self.playlist_song_virtual_album:
-                    # MA 2.9.6 ignores song coverArt and inherits album image.
-                    # Force every playlist track into its own virtual album id.
-                    child["albumId"] = s.id
-                    child["parent"] = s.id
-                    # Unique album name helps clients not merge all tracks under one album card.
-                    child["album"] = s.title
-                else:
-                    # Default: keep real album ids; only avoid playlist id as parent/albumId
-                    if not child.get("albumId") or str(child.get("albumId")).startswith("pl_"):
-                        child["albumId"] = s.id
-                    if not child.get("parent") or str(child.get("parent")).startswith("pl_"):
-                        child["parent"] = child["albumId"]
-                song_items.append(child)
-            # Album/header cover uses playlist art.
-            # Per-track list thumbs in MA 2.9.6 still inherit this album cover (MA ignores song coverArt).
-            # Virtual-album mode still helps song detail / now-playing via albumId=song.id.
-            album_cover = pl.cover if is_valid_cover_url(pl.cover) else pl.id
-            album = {
-                "id": pl.id,
-                "name": f"[歌单] {pl.name}",
-                "title": f"[歌单] {pl.name}",
-                "album": pl.name,
-                "artist": pl.owner or "TX歌单",
-                "artistId": f"artist_{(pl.owner or 'TX').split('、')[0]}",
-                "songCount": len(songs),
-                "duration": sum(s.duration for s in songs),
-                "created": pl.created or datetime.now(timezone.utc).isoformat(),
-                "coverArt": album_cover,
-                "isDir": True,
-                "playCount": 0,
-                "song": song_items,
-            }
-            return self.ok({"album": album})
-        # Song-level virtual album (enabled by playlist_song_virtual_album)
-        if str(aid).startswith(("tx_", "kg_", "kw_", "mg_", "wy_")):
-            song = await self.backend.get_song(str(aid))
-            if song:
-                child = song.to_child()
-                child["coverArt"] = song.id
-                child["albumId"] = song.id
-                child["parent"] = song.id
-                child["album"] = song.title
-                album = {
-                    "id": song.id,
-                    "name": song.title,
-                    "title": song.title,
-                    "album": song.title,
-                    "artist": song.artist,
-                    "artistId": song.artist_id,
-                    "songCount": 1,
-                    "duration": song.duration,
-                    "created": datetime.now(timezone.utc).isoformat(),
-                    # Important: coverArt id points to song so resolve_image/getCoverArt uses song art
-                    "coverArt": song.id,
-                    "isDir": True,
-                    "playCount": 0,
-                    "song": [child],
-                }
-                return self.ok({"album": album})
         # If album id unknown, try as song id
         name, songs = await self.backend.get_album_songs(aid)
         if not songs:
@@ -429,10 +322,7 @@ class OpenSubsonicAPI:
         if not pic and aid.startswith("alb_tx_"):
             mid = aid.replace("alb_tx_", "", 1)
             pic = f"https://y.gtimg.cn/music/photo_new/T002R500x500M000{mid}.jpg"
-        if not pic and aid.startswith("pl_tx_"):
-            pl, _ = await self.backend.get_playlist(aid)
-            if pl and is_valid_cover_url(pl.cover):
-                pic = pl.cover
+
         if not pic and str(aid).startswith(("tx_", "kg_", "kw_", "mg_", "wy_")):
             song = await self.backend.get_song(str(aid))
             if song and is_valid_cover_url(song.cover):
@@ -518,23 +408,54 @@ class OpenSubsonicAPI:
         sid = params.get("id")
         if not sid:
             return self.fail(10, "Required parameter is missing: id")
-        # IMPORTANT: MA calls this once per track when opening albums/playlists.
-        # Live lyric fetch here makes 100~300 track lists take many seconds.
-        # Return empty success instantly; do not fan-out to QQ lyric APIs.
-        song = self.backend.song_cache.get(sid)
+        song = await self.backend.get_song(sid)
         artist = song.artist if song else (params.get("artist") or "")
         title = song.title if song else (params.get("title") or "")
+        raw = await self.backend.get_lyrics(sid)
+        if not raw:
+            return self.ok(
+                {
+                    "lyrics": {"artist": artist, "title": title, "value": ""},
+                    "lyricsList": {"structuredLyrics": []},
+                }
+            )
+        parsed = parse_lrc(raw)
+        timed = [x for x in parsed if "start" in x]
+        unsynced = [
+            x
+            for x in parsed
+            if "start" not in x and x.get("value") and not re.match(r"^\[[a-zA-Z]+:", x["value"])
+        ]
+        lines = timed if timed else unsynced
+        structured = [
+            {
+                "lang": "und",
+                "synced": bool(timed),
+                "line": lines,
+                "displayArtist": artist,
+                "displayTitle": title,
+            }
+        ]
         return self.ok(
             {
-                "lyrics": {"artist": artist, "title": title, "value": ""},
-                "lyricsList": {"structuredLyrics": []},
+                "lyricsList": {"structuredLyrics": structured},
+                "lyrics": {"artist": artist, "title": title, "value": raw},
             }
         )
 
     async def _get_lyrics(self, params: dict[str, str]) -> dict[str, Any]:
-        # Same bulk-load concern as getLyricsBySongId: keep it instant.
         if params.get("id"):
             return await self._get_lyrics_by_id(params)
         title = (params.get("title") or "").strip()
         artist = (params.get("artist") or "").strip()
+        if not title:
+            return self.ok({"lyrics": {"artist": artist, "title": title, "value": ""}})
+        t = title.lower()
+        a = artist.lower()
+        for s in self.backend.song_cache.values():
+            if t in s.title.lower() and (not a or a in s.artist.lower()):
+                return await self._get_lyrics_by_id({"id": s.id, "artist": artist, "title": title})
+        hits = await self.backend.search(f"{title} {artist}".strip(), limit=5)
+        if hits:
+            return await self._get_lyrics_by_id({"id": hits[0].id, "artist": artist, "title": title})
         return self.ok({"lyrics": {"artist": artist, "title": title, "value": ""}})
