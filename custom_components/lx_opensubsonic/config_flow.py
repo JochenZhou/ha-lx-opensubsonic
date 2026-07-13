@@ -20,8 +20,8 @@ from .const import (
     DEFAULT_SEARCH_SOURCE,
     DEFAULT_USERNAME,
     DOMAIN,
-    QUALITY_OPTIONS,
-    SEARCH_SOURCES,
+    QUALITY_SELECT_OPTIONS,
+    SEARCH_SOURCE_OPTIONS,
 )
 
 
@@ -29,12 +29,21 @@ def _schema(defaults: dict | None = None, *, include_auth: bool = True) -> vol.S
     d = defaults or {}
     fields: dict = {}
     if include_auth:
-        fields[vol.Required(CONF_USERNAME, default=d.get(CONF_USERNAME, DEFAULT_USERNAME))] = str
-        fields[vol.Required(CONF_PASSWORD, default=d.get(CONF_PASSWORD, "password"))] = str
+        fields[vol.Required(CONF_USERNAME, default=d.get(CONF_USERNAME, DEFAULT_USERNAME))] = selector.TextSelector(
+            selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT)
+        )
+        fields[vol.Required(CONF_PASSWORD, default=d.get(CONF_PASSWORD, "password"))] = selector.TextSelector(
+            selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+        )
 
     fields[vol.Required(CONF_SEARCH_SOURCE, default=d.get(CONF_SEARCH_SOURCE, DEFAULT_SEARCH_SOURCE))] = (
         selector.SelectSelector(
-            selector.SelectSelectorConfig(options=SEARCH_SOURCES, mode=selector.SelectSelectorMode.DROPDOWN)
+            selector.SelectSelectorConfig(
+                options=[
+                    selector.SelectOptionDict(value=o["value"], label=o["label"]) for o in SEARCH_SOURCE_OPTIONS
+                ],
+                mode=selector.SelectSelectorMode.DROPDOWN,
+            )
         )
     )
     fields[
@@ -42,21 +51,24 @@ def _schema(defaults: dict | None = None, *, include_auth: bool = True) -> vol.S
             CONF_MUSIC_SOURCE_JS_URL,
             default=d.get(CONF_MUSIC_SOURCE_JS_URL, DEFAULT_MUSIC_SOURCE_JS_URL),
         )
-    ] = str
+    ] = selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.URL))
     fields[
         vol.Optional(
             CONF_PREFERRED_QUALITY,
             default=d.get(CONF_PREFERRED_QUALITY, DEFAULT_PREFERRED_QUALITY),
         )
     ] = selector.SelectSelector(
-        selector.SelectSelectorConfig(options=QUALITY_OPTIONS, mode=selector.SelectSelectorMode.DROPDOWN)
+        selector.SelectSelectorConfig(
+            options=[selector.SelectOptionDict(value=o["value"], label=o["label"]) for o in QUALITY_SELECT_OPTIONS],
+            mode=selector.SelectSelectorMode.DROPDOWN,
+        )
     )
     fields[
         vol.Optional(
             CONF_PLAYLIST_SONG_VIRTUAL_ALBUM,
             default=d.get(CONF_PLAYLIST_SONG_VIRTUAL_ALBUM, DEFAULT_PLAYLIST_SONG_VIRTUAL_ALBUM),
         )
-    ] = bool
+    ] = selector.BooleanSelector()
     return vol.Schema(fields)
 
 
@@ -77,6 +89,40 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(step_id="user", data_schema=_schema(), errors=errors)
 
+    async def async_step_reconfigure(self, user_input: dict | None = None) -> FlowResult:
+        """Handle reconfiguration from the integration menu."""
+        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        if entry is None:
+            return self.async_abort(reason="unknown")
+        defaults = {**entry.data, **(entry.options or {})}
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            new_data = {
+                CONF_USERNAME: user_input.get(CONF_USERNAME, defaults.get(CONF_USERNAME, DEFAULT_USERNAME)),
+                CONF_PASSWORD: user_input.get(CONF_PASSWORD, defaults.get(CONF_PASSWORD, "password")),
+                CONF_SEARCH_SOURCE: user_input.get(CONF_SEARCH_SOURCE, DEFAULT_SEARCH_SOURCE),
+                CONF_MUSIC_SOURCE_JS_URL: user_input.get(CONF_MUSIC_SOURCE_JS_URL, ""),
+                CONF_PREFERRED_QUALITY: user_input.get(CONF_PREFERRED_QUALITY, DEFAULT_PREFERRED_QUALITY),
+                CONF_PLAYLIST_SONG_VIRTUAL_ALBUM: bool(
+                    user_input.get(CONF_PLAYLIST_SONG_VIRTUAL_ALBUM, DEFAULT_PLAYLIST_SONG_VIRTUAL_ALBUM)
+                ),
+            }
+            self.hass.config_entries.async_update_entry(entry, data=new_data, options={
+                CONF_SEARCH_SOURCE: new_data[CONF_SEARCH_SOURCE],
+                CONF_MUSIC_SOURCE_JS_URL: new_data[CONF_MUSIC_SOURCE_JS_URL],
+                CONF_PREFERRED_QUALITY: new_data[CONF_PREFERRED_QUALITY],
+                CONF_PLAYLIST_SONG_VIRTUAL_ALBUM: new_data[CONF_PLAYLIST_SONG_VIRTUAL_ALBUM],
+            })
+            await self.hass.config_entries.async_reload(entry.entry_id)
+            return self.async_abort(reason="reconfigure_successful")
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=_schema(defaults, include_auth=True),
+            errors=errors,
+        )
+
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: config_entries.ConfigEntry):
@@ -84,7 +130,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
-    """Hot-switch search source / quality / music source JS without reinstall."""
+    """Options menu after installation."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self._config_entry = config_entry

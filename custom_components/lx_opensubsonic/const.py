@@ -26,3 +26,20 @@ DEFAULT_PLAYLIST_SONG_VIRTUAL_ALBUM = False
 
 SEARCH_SOURCES = ["tx", "wy", "kg", "kw", "mg"]
 QUALITY_OPTIONS = ["flac", "320k", "128k", "flac24bit", "hires"]
+
+# UI labels (Chinese-first)
+SEARCH_SOURCE_OPTIONS = [
+    {"value": "tx", "label": "QQ音乐 (tx)"},
+    {"value": "wy", "label": "网易云音乐 (wy)"},
+    {"value": "kg", "label": "酷狗音乐 (kg)"},
+    {"value": "kw", "label": "酷我音乐 (kw)"},
+    {"value": "mg", "label": "咪咕音乐 (mg)"},
+]
+
+QUALITY_SELECT_OPTIONS = [
+    {"value": "flac", "label": "无损 FLAC"},
+    {"value": "320k", "label": "高品质 320k"},
+    {"value": "128k", "label": "标准 128k"},
+    {"value": "flac24bit", "label": "Hi-Res FLAC 24bit"},
+    {"value": "hires", "label": "Hi-Res"},
+]

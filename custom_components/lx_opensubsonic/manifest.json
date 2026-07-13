@@ -5,8 +5,9 @@
     "@JochenZhou"
   ],
   "config_flow": true,
-  "documentation": "https://github.com/JochenZhou/lxserver",
+  "documentation": "https://github.com/JochenZhou/ha-lx-opensubsonic",
+  "issue_tracker": "https://github.com/JochenZhou/ha-lx-opensubsonic/issues",
   "iot_class": "cloud_polling",
-  "version": "0.3.4",
+  "version": "0.3.9",
   "requirements": []
 }

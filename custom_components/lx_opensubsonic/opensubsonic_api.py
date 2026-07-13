@@ -327,12 +327,19 @@ class OpenSubsonicAPI:
             song_items = []
             for s in songs:
                 child = s.to_child()
-                # Always use song-level coverArt id; never playlist cover.
-                child["coverArt"] = s.id
+                # Prefer direct song cover URL; fallback to song id for getCoverArt.
+                # Never use playlist cover on tracks.
+                if is_valid_cover_url(s.cover):
+                    child["coverArt"] = s.cover
+                else:
+                    child["coverArt"] = s.id
                 if self.playlist_song_virtual_album:
-                    # Song-level virtual album: MA resolves cover via getAlbum(song_id)/getCoverArt(song_id)
+                    # MA 2.9.6 ignores song coverArt and inherits album image.
+                    # Force every playlist track into its own virtual album id.
                     child["albumId"] = s.id
                     child["parent"] = s.id
+                    # Unique album name helps clients not merge all tracks under one album card.
+                    child["album"] = s.title
                 else:
                     # Default: keep real album ids; only avoid playlist id as parent/albumId
                     if not child.get("albumId") or str(child.get("albumId")).startswith("pl_"):
@@ -340,6 +347,10 @@ class OpenSubsonicAPI:
                     if not child.get("parent") or str(child.get("parent")).startswith("pl_"):
                         child["parent"] = child["albumId"]
                 song_items.append(child)
+            # Album/header cover uses playlist art.
+            # Per-track list thumbs in MA 2.9.6 still inherit this album cover (MA ignores song coverArt).
+            # Virtual-album mode still helps song detail / now-playing via albumId=song.id.
+            album_cover = pl.cover if is_valid_cover_url(pl.cover) else pl.id
             album = {
                 "id": pl.id,
                 "name": f"[歌单] {pl.name}",
@@ -350,7 +361,7 @@ class OpenSubsonicAPI:
                 "songCount": len(songs),
                 "duration": sum(s.duration for s in songs),
                 "created": pl.created or datetime.now(timezone.utc).isoformat(),
-                "coverArt": pl.cover if is_valid_cover_url(pl.cover) else pl.id,
+                "coverArt": album_cover,
                 "isDir": True,
                 "playCount": 0,
                 "song": song_items,
@@ -364,6 +375,7 @@ class OpenSubsonicAPI:
                 child["coverArt"] = song.id
                 child["albumId"] = song.id
                 child["parent"] = song.id
+                child["album"] = song.title
                 album = {
                     "id": song.id,
                     "name": song.title,
@@ -374,6 +386,7 @@ class OpenSubsonicAPI:
                     "songCount": 1,
                     "duration": song.duration,
                     "created": datetime.now(timezone.utc).isoformat(),
+                    # Important: coverArt id points to song so resolve_image/getCoverArt uses song art
                     "coverArt": song.id,
                     "isDir": True,
                     "playCount": 0,

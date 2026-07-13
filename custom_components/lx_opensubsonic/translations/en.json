@@ -2,49 +2,74 @@
   "config": {
     "step": {
       "user": {
-        "title": "LX OpenSubsonic",
-        "description": "OpenSubsonic bridge. Configure search source, music-source JS URL, and quality.",
+        "title": "Add LX OpenSubsonic",
+        "description": "Configure an OpenSubsonic bridge for Music Assistant online music search and playback.",
         "data": {
-          "username": "Username (Music Assistant)",
-          "password": "Password (Music Assistant)",
+          "username": "Username",
+          "password": "Password",
           "search_source": "Default search source",
           "music_source_js_url": "Music source JS URL",
           "preferred_quality": "Preferred quality",
-          "playlist_song_virtual_album": "Use song-level virtual albumId for online playlists"
+          "playlist_song_virtual_album": "Improve online playlist covers"
         },
         "data_description": {
-          "username": "Account used by Music Assistant. Default: admin",
-          "password": "Password used by Music Assistant. Default: password",
-          "search_source": "Search platform: tx/wy/kg/kw/mg. Default: tx",
-          "music_source_js_url": "Music source JS URL. Runtime-parsed for stream API. Do not hard-code paid keys.",
-          "preferred_quality": "Preferred stream quality with fallback. Default: flac",
-          "playlist_song_virtual_album": "Default off. Only for online-search playlists (pl_tx_*): remap each song albumId/parent to the song id so Music Assistant can show per-track covers. Normal song/album search is unchanged."
+          "username": "Username used by Music Assistant to connect. Default: admin",
+          "password": "Password used by Music Assistant to connect. Default: password",
+          "search_source": "Default music platform for search.",
+          "music_source_js_url": "Music source script URL used to resolve playback links.",
+          "preferred_quality": "Preferred playback quality, with automatic fallback.",
+          "playlist_song_virtual_album": "Default off. Only affects online-search playlists. Helps song detail and now-playing covers."
         }
       },
-      "init": {
-        "title": "LX OpenSubsonic options",
-        "description": "Hot-switch search source / quality / music source JS.",
+      "reconfigure": {
+        "title": "Reconfigure LX OpenSubsonic",
+        "description": "Update account, search source, music source URL and quality settings.",
         "data": {
+          "username": "Username",
+          "password": "Password",
           "search_source": "Default search source",
           "music_source_js_url": "Music source JS URL",
           "preferred_quality": "Preferred quality",
-          "playlist_song_virtual_album": "Use song-level virtual albumId for online playlists"
+          "playlist_song_virtual_album": "Improve online playlist covers"
         },
         "data_description": {
-          "search_source": "Search platform: tx/wy/kg/kw/mg. Default: tx",
-          "music_source_js_url": "Music source JS URL for stream resolution",
-          "preferred_quality": "Preferred quality. Default: flac",
-          "playlist_song_virtual_album": "Default off. Only for online-search playlists (pl_tx_*): remap each song albumId/parent to the song id so Music Assistant can show per-track covers. Normal song/album search is unchanged."
+          "username": "Username used by Music Assistant to connect.",
+          "password": "Password used by Music Assistant to connect.",
+          "search_source": "Default music platform for search.",
+          "music_source_js_url": "Music source script URL used to resolve playback links.",
+          "preferred_quality": "Preferred playback quality, with automatic fallback.",
+          "playlist_song_virtual_album": "Default off. Only affects online-search playlists. Helps song detail and now-playing covers."
         }
       }
     },
     "error": {
       "cannot_connect": "Cannot connect",
-      "invalid_auth": "Invalid auth",
+      "invalid_auth": "Invalid authentication",
       "unknown": "Unknown error"
     },
     "abort": {
-      "already_configured": "Already configured"
+      "already_configured": "LX OpenSubsonic is already configured",
+      "reconfigure_successful": "Reconfiguration successful"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "LX OpenSubsonic options",
+        "description": "Changes reload automatically. No reinstall needed.",
+        "data": {
+          "search_source": "Default search source",
+          "music_source_js_url": "Music source JS URL",
+          "preferred_quality": "Preferred quality",
+          "playlist_song_virtual_album": "Improve online playlist covers"
+        },
+        "data_description": {
+          "search_source": "Default music platform for search.",
+          "music_source_js_url": "Music source script URL used to resolve playback links.",
+          "preferred_quality": "Preferred playback quality, with automatic fallback.",
+          "playlist_song_virtual_album": "Default off. Only affects online-search playlists. Helps song detail and now-playing covers."
+        }
+      }
     }
   }
 }
