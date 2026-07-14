@@ -61,7 +61,7 @@ https://github.com/JochenZhou/ha-lx-opensubsonic
 | 配置项 | 说明 |
 |---|---|
 | 用户名 / 密码 | 给 Music Assistant 连接使用 |
-| 默认搜索源 | 如 `tx`（QQ 音乐） |
+| 默认搜索源 | 如 `tx` |
 | 自定义音源 JS 链接 | 可选；用于连接用户自行配置且有权使用的播放地址服务，默认留空 |
 | 优先音质 | 如 `flac` / `320k` |
 
@@ -116,7 +116,7 @@ https://github.com/JochenZhou/ha-lx-opensubsonic
 步骤：
 
 1. 填写 `歌单链接或ID`
-2. 选择 `歌单平台`（可自动识别；纯数字 ID 默认按 QQ）
+2. 选择 `歌单平台`（可自动识别；纯数字 ID 默认按 `tx`）
 3. 点击 `导入歌单`
 4. 在 Music Assistant 中让歌单进入库（按顺序）：
    1. 先到音乐源「OpenSubsonic Media Server Library」点**重载/立即同步**
