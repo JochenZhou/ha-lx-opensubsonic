@@ -114,9 +114,10 @@ https://github.com/JochenZhou/ha-lx-opensubsonic
 1. 填写 `歌单链接或ID`
 2. 选择 `歌单平台`（可自动识别；纯数字 ID 默认按 QQ）
 3. 点击 `导入歌单`
-4. 在 Music Assistant 中让歌单进入库（二选一）：
-   - **推荐**：浏览 → `OpenSubsonic Media Server Library` → **播放列表** → 点开新歌单一次  
-   - 或直接 **重启 Music Assistant**
+4. 在 Music Assistant 中让歌单进入库（按顺序）：
+   1. 先到音乐源「OpenSubsonic Media Server Library」点**重载/立即同步**
+   2. 若还没有，再去「浏览 → OpenSubsonic Media Server Library → 播放列表」点开一次
+   3. 仍没有再**重启 Music Assistant**
 
 多歌单管理：
 
@@ -132,9 +133,10 @@ https://github.com/JochenZhou/ha-lx-opensubsonic
 
 ### Music Assistant 注意
 
-- MA「自带播放列表」是本地库缓存；仅点 OpenSubsonic 的 **重载/同步** 往往不会立刻出现新歌单
-- 文件夹浏览是实时接口，导入后这里一定能看到；点一下会收进 MA 库
-- 导入成功通知里也会附带上述操作提示
+- MA「自带播放列表」是本地库缓存
+- 文件夹浏览是实时接口，导入后这里一定能看到
+- **新导入歌单首次打开可能要十几秒到几十秒**（MA 会逐曲取专辑/歌词元数据；桥接已尽量做缓存优化）
+- 导入成功通知里也会附带同步顺序提示
 
 ## 使用说明
 

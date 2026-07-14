@@ -128,12 +128,12 @@ class OpenSubsonicAPI:
                 }
             )
         if method == "getOpenSubsonicExtensions":
+            # Do NOT advertise songLyrics. MA would then call getLyricsBySongId for
+            # every playlist track on first open (tens of seconds for large playlists).
             return self.ok(
                 {
                     "openSubsonicExtensions": [
                         {"name": "formPost", "versions": [1]},
-                        {"name": "songLyrics", "versions": [1]},
-                        {"name": "lyrics", "versions": [1]},
                         {"name": "coverArtScaling", "versions": [1]},
                     ]
                 }
@@ -224,9 +224,14 @@ class OpenSubsonicAPI:
         pl = store.get(pid)
         if not pl:
             return self.fail(70, f"Playlist not found: {pid}")
-        # cache tracks into backend song cache for stream/lyrics/cover
+        # Warm song/album/cover caches so subsequent getAlbum/getSong are local-only.
         for tr in pl.tracks:
-            self.backend.cache_song(tr.to_song())
+            song = tr.to_song()
+            self.backend.cache_song(song)
+            if song.album_id and is_valid_cover_url(song.cover):
+                self.backend.cover_cache[song.album_id] = song.cover
+            if song.id and is_valid_cover_url(song.cover):
+                self.backend.cover_cache[song.id] = song.cover
         return self.ok({"playlist": pl.to_subsonic(with_tracks=True)})
 
     async def _search(self, params: dict[str, str]) -> dict[str, Any]:
@@ -310,30 +315,43 @@ class OpenSubsonicAPI:
         aid = params.get("id")
         if not aid:
             return self.fail(10, "Required parameter is missing: id")
-        # If album id unknown, try as song id
-        name, songs = await self.backend.get_album_songs(aid)
+        # Cache only — MA playlist first-open may call getAlbum once per track.
+        songs = [s for s in self.backend.song_cache.values() if s.album_id == aid or s.id == aid]
+        if not songs and aid in self.backend.song_cache:
+            songs = [self.backend.song_cache[aid]]
+        name = songs[0].album if songs else "Album"
         if not songs:
-            song = await self.backend.get_song(aid)
-            if song:
-                songs = [song]
-                name = song.album
-                aid = song.album_id or aid
-        if not songs and aid.startswith("alb_tx_"):
-            # search by album mid indirectly via cache miss
-            songs = [s for s in self.backend.song_cache.values() if s.album_id == aid]
-            if songs:
-                name = songs[0].album
+            return self.ok(
+                {
+                    "album": {
+                        "id": aid,
+                        "name": name,
+                        "title": name,
+                        "album": name,
+                        "artist": "LX Music",
+                        "artistId": "artist_lx",
+                        "songCount": 0,
+                        "duration": 0,
+                        "created": datetime.now(timezone.utc).isoformat(),
+                        "coverArt": self.backend.cover_cache.get(aid, aid),
+                        "isDir": True,
+                        "playCount": 0,
+                        "song": [],
+                    }
+                }
+            )
+        cover = songs[0].cover if is_valid_cover_url(songs[0].cover) else self.backend.cover_cache.get(aid, aid)
         album = {
             "id": aid,
             "name": name,
             "title": name,
             "album": name,
-            "artist": songs[0].artist if songs else "LX Music",
-            "artistId": songs[0].artist_id if songs else "artist_lx",
+            "artist": songs[0].artist,
+            "artistId": songs[0].artist_id,
             "songCount": len(songs),
             "duration": sum(s.duration for s in songs),
             "created": datetime.now(timezone.utc).isoformat(),
-            "coverArt": songs[0].cover if songs and is_valid_cover_url(songs[0].cover) else aid,
+            "coverArt": cover,
             "isDir": True,
             "playCount": 0,
             "song": [s.to_child() for s in songs],
@@ -432,10 +450,13 @@ class OpenSubsonicAPI:
         sid = params.get("id")
         if not sid:
             return self.fail(10, "Required parameter is missing: id")
-        song = await self.backend.get_song(sid)
+        # Cache-only song metadata; never block playlist open on remote lyric APIs.
+        song = self.backend.song_cache.get(sid)
         artist = song.artist if song else (params.get("artist") or "")
         title = song.title if song else (params.get("title") or "")
-        raw = await self.backend.get_lyrics(sid)
+        # fetch=False: skip remote lyric HTTP. Playlist first-open would otherwise
+        # call this once per track and take tens of seconds.
+        raw = await self.backend.get_lyrics(sid, fetch=False)
         if not raw:
             return self.ok(
                 {
@@ -472,6 +493,7 @@ class OpenSubsonicAPI:
             return await self._get_lyrics_by_id(params)
         title = (params.get("title") or "").strip()
         artist = (params.get("artist") or "").strip()
+        # Fast path only: no search fallback (search made playlist open very slow).
         if not title:
             return self.ok({"lyrics": {"artist": artist, "title": title, "value": ""}})
         t = title.lower()
@@ -479,7 +501,4 @@ class OpenSubsonicAPI:
         for s in self.backend.song_cache.values():
             if t in s.title.lower() and (not a or a in s.artist.lower()):
                 return await self._get_lyrics_by_id({"id": s.id, "artist": artist, "title": title})
-        hits = await self.backend.search(f"{title} {artist}".strip(), limit=5)
-        if hits:
-            return await self._get_lyrics_by_id({"id": hits[0].id, "artist": artist, "title": title})
         return self.ok({"lyrics": {"artist": artist, "title": title, "value": ""}})

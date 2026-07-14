@@ -12,9 +12,11 @@ from .playlist_store import import_playlist, refresh_playlist
 
 # Shown after successful import/refresh so users know how MA actually picks it up.
 _MA_PLAYLIST_HINT = (
-    "Music Assistant 提示：自带播放列表是本地缓存。"
-    "导入后请到「浏览 → OpenSubsonic Media Server Library → 播放列表」点开一次，"
-    "或重启 Music Assistant；仅点重载/同步往往不会立刻出现。"
+    "Music Assistant 同步顺序：\n"
+    "1) 先到音乐源「OpenSubsonic Media Server Library」里点重载/立即同步；\n"
+    "2) 若还没有，再去「浏览 → OpenSubsonic Media Server Library → 播放列表」点开一次；\n"
+    "3) 仍没有再重启 Music Assistant。\n"
+    "说明：新导入歌单首次打开可能要十几秒到几十秒（MA 会逐曲取专辑/歌词元数据）；"
     "搜索页不支持找导入歌单。"
 )
 
