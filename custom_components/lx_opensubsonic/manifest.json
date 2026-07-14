@@ -8,6 +8,6 @@
   "documentation": "https://github.com/JochenZhou/ha-lx-opensubsonic",
   "issue_tracker": "https://github.com/JochenZhou/ha-lx-opensubsonic/issues",
   "iot_class": "cloud_polling",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "requirements": []
 }

@@ -67,7 +67,7 @@ class OpenSubsonicView(HomeAssistantView):
             url = await data["backend"].resolve_stream_url(song_id)
             if url:
                 raise web.HTTPFound(location=url)
-            return web.json_response(api.fail(0, "No stream URL. Configure music_source_js_url."))
+            return web.json_response(api.fail(0, "No stream URL. Configure an authorized custom music source service."))
 
         return web.json_response(result)
 

@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "添加 LX OpenSubsonic",
-        "description": "配置后可供 Music Assistant 搜索和播放在线音乐。安装后可用实体切换搜索源和音质。",
+        "description": "配置后可供 Music Assistant 通过 OpenSubsonic 协议访问用户配置的数据源与播放地址。安装后可用实体切换搜索源和音质。本项目不提供音频、播放链接、音源脚本或密钥。",
         "data": {
           "username": "用户名",
           "password": "密码",
@@ -15,13 +15,13 @@
           "username": "Music Assistant 连接本集成时使用的用户名，默认 admin。",
           "password": "Music Assistant 连接本集成时使用的密码，默认 password。",
           "search_source": "初始默认搜索源，安装后可在实体中随时切换。",
-          "music_source_js_url": "用于解析播放链接的音源脚本地址。",
+          "music_source_js_url": "可选；用于连接用户自行配置且有权使用的播放地址服务。本项目不提供、不托管、不分发音源脚本、播放链接或密钥。",
           "preferred_quality": "初始优先音质，安装后可在实体中随时切换。"
         }
       },
       "reconfigure": {
         "title": "重新配置 LX OpenSubsonic",
-        "description": "仅修改连接账号和音源 JS 链接。搜索源/音质请用实体切换。",
+        "description": "仅修改连接账号和自定义音源 JS 链接。搜索源/音质请用实体切换。请仅配置你有权使用的服务。",
         "data": {
           "username": "用户名",
           "password": "密码",
@@ -30,7 +30,7 @@
         "data_description": {
           "username": "Music Assistant 连接本集成时使用的用户名。",
           "password": "Music Assistant 连接本集成时使用的密码。",
-          "music_source_js_url": "用于解析播放链接的音源脚本地址。"
+          "music_source_js_url": "可选；用于连接用户自行配置且有权使用的播放地址服务。本项目不提供、不托管、不分发音源脚本、播放链接或密钥。"
         }
       }
     },
@@ -47,7 +47,7 @@
   "services": {
     "test_connection": {
       "name": "测试连接",
-      "description": "测试搜索、封面和播放取链是否正常，结果以通知显示。"
+      "description": "测试搜索、封面和用户自定义播放地址服务是否正常，结果以通知显示。"
     }
   }
 }

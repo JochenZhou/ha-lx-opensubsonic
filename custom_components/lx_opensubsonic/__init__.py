@@ -119,7 +119,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             f"总体: {'通过' if data.get('ok') else '未完全通过'}",
             f"搜索: {'✓' if data.get('search_ok') else '✗'}",
             f"封面: {'✓' if data.get('cover_ok') else '✗'}",
-            f"播放取链: {'✓' if data.get('stream_ok') else '✗'}",
+            f"播放地址: {'✓' if data.get('stream_ok') else '✗'}",
             f"音源JS: {'✓' if data.get('js_ok') else '✗'}",
         ]
         sample = data.get("sample_song") or {}

@@ -1080,7 +1080,7 @@ class MusicBackend:
             result["js_api_ready"] = bool(api_url)
             result["js_key_ready"] = bool(api_key)
             if not api_url and self.music_source_js_url:
-                result["errors"].append("音源 JS 未能解析出可用取链地址")
+                result["errors"].append("自定义音源 JS 未能解析出可用播放地址服务")
         except Exception as err:
             result["errors"].append(f"音源 JS 检查失败: {err}")
         result["elapsed_ms"]["js"] = int((_time.time() - t0) * 1000)
@@ -1128,7 +1128,7 @@ class MusicBackend:
                 result["stream_ok"] = bool(url)
                 result["stream_url_preview"] = (url or "")[:120]
                 if not url:
-                    result["errors"].append("播放取链失败，请检查音源 JS 链接")
+                    result["errors"].append("播放地址获取失败，请检查自定义音源 JS 链接及使用授权")
             else:
                 result["errors"].append("跳过播放检查：无搜索结果")
         except Exception as err:

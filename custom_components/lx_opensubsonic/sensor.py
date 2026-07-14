@@ -20,7 +20,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             LxHealthSensor(coordinator, entry),
             LxStatusSensor(coordinator, entry, "search_ok", "搜索状态"),
             LxStatusSensor(coordinator, entry, "cover_ok", "封面状态"),
-            LxStatusSensor(coordinator, entry, "stream_ok", "播放取链状态"),
+            LxStatusSensor(coordinator, entry, "stream_ok", "播放地址状态"),
             LxStatusSensor(coordinator, entry, "js_ok", "音源JS状态"),
             LxPlaylistCountSensor(coordinator, entry),
         ]
