@@ -107,11 +107,11 @@ https://github.com/JochenZhou/ha-lx-opensubsonic
 
 支持通过实体 UI 手动导入多平台歌单到 OpenSubsonic 播放列表：
 
-- QQ 音乐 `tx`
-- 网易云 `wy`
-- 酷狗 `kg`
-- 酷我 `kw`
-- 咪咕 `mg`
+- `tx`
+- `wy`
+- `kg`
+- `kw`
+- `mg`
 
 步骤：
 

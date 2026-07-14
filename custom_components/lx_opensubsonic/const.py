@@ -18,11 +18,11 @@ SEARCH_SOURCES = ["tx", "wy", "kg", "kw", "mg"]
 QUALITY_OPTIONS = ["flac", "320k", "128k", "flac24bit", "hires"]
 
 SEARCH_SOURCE_OPTIONS = [
-    {"value": "tx", "label": "QQ音乐 (tx)"},
-    {"value": "wy", "label": "网易云音乐 (wy)"},
-    {"value": "kg", "label": "酷狗音乐 (kg)"},
-    {"value": "kw", "label": "酷我音乐 (kw)"},
-    {"value": "mg", "label": "咪咕音乐 (mg)"},
+    {"value": "tx", "label": "tx"},
+    {"value": "wy", "label": "wy"},
+    {"value": "kg", "label": "kg"},
+    {"value": "kw", "label": "kw"},
+    {"value": "mg", "label": "mg"},
 ]
 
 QUALITY_SELECT_OPTIONS = [
@@ -41,11 +41,11 @@ CONF_PLAYLIST_INPUT = "playlist_input"
 CONF_PLAYLIST_SOURCE = "playlist_source"
 DEFAULT_PLAYLIST_SOURCE = "auto"
 PLAYLIST_SOURCE_OPTIONS = [
-    {"value": "auto", "label": "自动识别"},
-    {"value": "tx", "label": "QQ音乐 (tx)"},
-    {"value": "wy", "label": "网易云音乐 (wy)"},
-    {"value": "kg", "label": "酷狗音乐 (kg)"},
-    {"value": "kw", "label": "酷我音乐 (kw)"},
-    {"value": "mg", "label": "咪咕音乐 (mg)"},
+    {"value": "auto", "label": "auto"},
+    {"value": "tx", "label": "tx"},
+    {"value": "wy", "label": "wy"},
+    {"value": "kg", "label": "kg"},
+    {"value": "kw", "label": "kw"},
+    {"value": "mg", "label": "mg"},
 ]
 PLAYLIST_SOURCE_LABELS = {o["value"]: o["label"] for o in PLAYLIST_SOURCE_OPTIONS}
