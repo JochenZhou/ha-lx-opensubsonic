@@ -113,9 +113,8 @@ class PlaylistStore:
         self.last_input: str = ""
         self.last_source: str = "auto"
         self.last_message: str = ""
-        self._load()
 
-    def _load(self) -> None:
+    def load(self) -> None:
         if not self.path.exists():
             return
         try:
@@ -163,6 +162,12 @@ class PlaylistStore:
         }
         self.path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    async def async_save(self, hass) -> None:
+        await hass.async_add_executor_job(self.save)
+
+    async def async_load(self, hass) -> None:
+        await hass.async_add_executor_job(self.load)
+
     def list_playlists(self) -> list[ImportedPlaylist]:
         # stable newest-updated first
         return sorted(self.playlists.values(), key=lambda p: p.updated_at or p.created or p.name, reverse=True)
@@ -183,25 +188,21 @@ class PlaylistStore:
         for pl in self.playlists.values():
             if pl.name == name:
                 self.selected_id = pl.id
-                self.save()
                 return
 
     def upsert(self, pl: ImportedPlaylist) -> None:
         self.playlists[pl.id] = pl
         self.selected_id = pl.id
-        self.save()
 
     def delete_selected(self) -> str:
         pl = self.selected()
         if not pl:
             self.last_message = "没有可删除的歌单"
-            self.save()
             return self.last_message
         self.playlists.pop(pl.id, None)
         items = self.list_playlists()
         self.selected_id = items[0].id if items else ""
         self.last_message = f"已删除《{pl.name}》"
-        self.save()
         return self.last_message
 
     def clear_all(self) -> str:
@@ -209,7 +210,6 @@ class PlaylistStore:
         self.playlists.clear()
         self.selected_id = ""
         self.last_message = f"已清空全部歌单（{n}）"
-        self.save()
         return self.last_message
 
 
@@ -690,7 +690,6 @@ async def import_playlist(
     store.last_source = preferred_source or "auto"
     store.upsert(pl)
     store.last_message = f"已导入《{pl.name}》共 {pl.song_count} 首（{source}）"
-    store.save()
     return pl
 
 
@@ -703,5 +702,4 @@ async def refresh_playlist(session: ClientSession, store: PlaylistStore) -> Impo
     new_pl = await fetch_playlist_by_source(session, pl.source, pl.remote_id)
     store.upsert(new_pl)
     store.last_message = f"已刷新《{new_pl.name}》共 {new_pl.song_count} 首（{new_pl.source}）"
-    store.save()
     return new_pl

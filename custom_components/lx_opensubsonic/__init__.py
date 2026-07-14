@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 
 import voluptuous as vol
@@ -31,6 +32,14 @@ _LOGGER = logging.getLogger(__name__)
 SERVICE_TEST_CONNECTION = "test_connection"
 
 
+def _integration_version() -> str:
+    try:
+        manifest = json.loads(Path(__file__).with_name("manifest.json").read_text(encoding="utf-8"))
+    except Exception:
+        return "unknown"
+    return str(manifest.get("version") or "unknown")
+
+
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     return True
 
@@ -56,10 +65,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     store_path = Path(hass.config.path(f".storage/{DOMAIN}_playlists_{entry.entry_id}.json"))
     playlist_store = PlaylistStore(store_path)
+    await playlist_store.async_load(hass)
     api = OpenSubsonicAPI(backend, username=username, password=password, playlist_store=playlist_store)
     coordinator = LxOpenSubsonicCoordinator(hass, entry, backend)
 
     hass.data.setdefault(DOMAIN, {})
+    version = _integration_version()
     entry_data = {
         "api": api,
         "backend": backend,
@@ -68,7 +79,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "username": username,
         "password": password,
         "entry": entry,
-        "version": "0.6.0",
+        "version": version,
     }
     hass.data[DOMAIN][entry.entry_id] = entry_data
     hass.data[DOMAIN].update(
@@ -82,7 +93,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "preferred_quality": preferred_quality,
             "music_source_js_url": music_source_js_url,
             "entry_id": entry.entry_id,
-            "version": "0.6.0",
+            "version": version,
             "coordinator": coordinator,
         }
     )

@@ -46,7 +46,7 @@ class PlaylistInputText(TextEntity):
         store = self._data.get("playlist_store")
         if store is not None:
             store.last_input = value
-            store.save()
+            await store.async_save(self.hass)
         new_data = {**self._entry.data, CONF_PLAYLIST_INPUT: value}
         self.hass.config_entries.async_update_entry(self._entry, data=new_data)
         self.async_write_ha_state()

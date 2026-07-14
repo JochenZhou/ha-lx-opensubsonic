@@ -23,6 +23,8 @@ UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
+MAX_SONG_CACHE = 5000
+MAX_COVER_CACHE = 5000
 
 
 def _md5(s: str) -> str:
@@ -123,17 +125,10 @@ class Song:
     extra: dict[str, Any] = field(default_factory=dict)
 
     def to_child(self) -> dict[str, Any]:
-        # Prefer direct cover URL; else album id / song id for getCoverArt.
-        if is_valid_cover_url(self.cover):
-            cover = self.cover
-        elif self.album_id:
-            cover = self.album_id
-        else:
-            cover = self.id or "logo"
-        parent = self.album_id or self.id
-        return {
+        cover_id = self.album_id or self.id or "logo"
+        child = {
             "id": self.id,
-            "parent": parent,
+            "parent": self.album_id or self.id,
             "isDir": False,
             "title": self.title,
             "name": self.title,
@@ -143,7 +138,7 @@ class Song:
             "artistId": self.artist_id or f"artist_{self.artist.split('、')[0]}",
             "track": 0,
             "year": 0,
-            "coverArt": cover,
+            "coverArt": cover_id,
             "duration": self.duration,
             "bitRate": self.bitrate,
             "suffix": self.suffix,
@@ -153,6 +148,9 @@ class Song:
             "type": "music",
             "mediaType": "song",
         }
+        if is_valid_cover_url(self.cover):
+            child["coverArtUrl"] = self.cover
+        return child
 
 
 
@@ -174,12 +172,18 @@ class MusicBackend:
         self._timeout = ClientTimeout(total=20)
         self._source_cache: dict[str, Any] = {"url": None, "api_url": "", "api_key": "", "ts": 0}
 
+    def _trim_cache(self, cache: dict[str, Any], max_size: int) -> None:
+        while len(cache) > max_size:
+            cache.pop(next(iter(cache)))
+
     def cache_song(self, song: Song) -> None:
         self.song_cache[song.id] = song
         if is_valid_cover_url(song.cover):
             self.cover_cache[song.id] = song.cover
             if song.album_id:
                 self.cover_cache[song.album_id] = song.cover
+        self._trim_cache(self.song_cache, MAX_SONG_CACHE)
+        self._trim_cache(self.cover_cache, MAX_COVER_CACHE)
 
     async def _json_post(self, url: str, payload: dict[str, Any], headers: dict[str, str] | None = None) -> dict[str, Any]:
         h = {

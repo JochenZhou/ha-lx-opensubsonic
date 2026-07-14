@@ -17,6 +17,8 @@
 
 ![搜索歌曲](docs/images/ma-search-tracks.png)
 
+> 说明：Music Assistant 当前 OpenSubsonic provider 不会读取歌曲搜索结果里的 track 封面字段，因此歌曲搜索列表可能不显示封面；歌曲详情、播放页、专辑搜索和歌手搜索的封面不受影响。
+
 ### 搜索歌手
 
 ![搜索歌手](docs/images/ma-search-artists.png)
@@ -58,7 +60,7 @@ https://github.com/JochenZhou/ha-lx-opensubsonic
 |---|---|
 | 用户名 / 密码 | 给 Music Assistant 连接使用 |
 | 默认搜索源 | 如 `tx`（QQ 音乐） |
-| 音源 JS 链接 | 用于解析播放链接（自定义源） |
+| 音源 JS 链接 | 用于解析播放链接（自定义源，默认留空，需要自行配置） |
 | 优先音质 | 如 `flac` / `320k` |
 
 安装后可用实体随时切换：
@@ -131,11 +133,17 @@ https://github.com/JochenZhou/ha-lx-opensubsonic
 - 不会在搜索结果中映射歌单
 - 搜索页不会出现导入歌单
 
+### 已知限制
+
+- Music Assistant 当前 OpenSubsonic provider 不会读取歌曲搜索结果里的 track 封面字段，因此歌曲搜索列表可能不显示封面；歌曲详情、播放页、专辑搜索和歌手搜索的封面不受影响。
+- 为保证歌单打开速度，默认不声明 `songLyrics` 扩展；歌词接口只走已缓存歌曲的快速路径，不做搜索兜底。
+- 音源 JS 链接默认留空，需要用户自行配置；本项目不内置、不分发、不保证第三方音源 JS 的可用性。
+- 内存歌曲/封面缓存有数量上限，HA 重启后会重新按搜索或歌单访问重建。
+
 ### Music Assistant 注意
 
 - MA「自带播放列表」是本地库缓存
 - 文件夹浏览是实时接口，导入后这里一定能看到
-- **新导入歌单首次打开可能要十几秒到几十秒**（MA 会逐曲取专辑/歌词元数据；桥接已尽量做缓存优化）
 - 导入成功通知里也会附带同步顺序提示
 
 ## 使用说明
@@ -150,6 +158,20 @@ https://github.com/JochenZhou/ha-lx-opensubsonic
 1. 检查音源 JS 链接是否可用
 2. 点击集成里的 **测试连接** 按钮
 3. 确认 MA 的 Base URL / Port / Server Path / 账号密码是否正确
+
+## 验证脚本
+
+发版或部署后可运行最小 OpenSubsonic 冒烟测试：
+
+```bash
+python3 scripts/smoke_test.py \
+  --base http://<HA>:8123/api/lx_opensubsonic \
+  --username admin \
+  --password password \
+  --query 周杰伦
+```
+
+脚本会检查 `ping`、`search3`、`getSong`、`getAlbum`、`getCoverArt`、`getPlaylists`。
 
 ## 贡献与致谢
 

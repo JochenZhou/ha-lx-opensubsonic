@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl
 
@@ -12,12 +14,30 @@ from .music_backend import MusicBackend, Song, is_valid_cover_url, parse_duratio
 
 
 VERSION = "1.16.1"
-SERVER_VERSION = "0.1.0"
 SERVER_TYPE = "lx-opensubsonic"
+
+
+def integration_version() -> str:
+    try:
+        manifest = json.loads(Path(__file__).with_name("manifest.json").read_text(encoding="utf-8"))
+    except Exception:
+        return "unknown"
+    return str(manifest.get("version") or "unknown")
+
+
+SERVER_VERSION = integration_version()
 
 
 def md5(s: str) -> str:
     return hashlib.md5(s.encode("utf-8")).hexdigest()
+
+
+def int_param(params: dict[str, str], key: str, default: int, minimum: int = 0, maximum: int = 50) -> int:
+    try:
+        value = int(params.get(key) or default)
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(value, maximum))
 
 
 def parse_lrc(lrc: str) -> list[dict[str, Any]]:
@@ -237,9 +257,9 @@ class OpenSubsonicAPI:
     async def _search(self, params: dict[str, str]) -> dict[str, Any]:
         """Search songs/albums/artists only. Playlists are not supported."""
         query = (params.get("query") or "").strip().strip('"').strip("'")
-        song_count = max(0, int(params.get("songCount") or 20))
-        album_count = max(0, int(params.get("albumCount") or 10))
-        artist_count = max(0, int(params.get("artistCount") or 10))
+        song_count = int_param(params, "songCount", 20, 0, 50)
+        album_count = int_param(params, "albumCount", 10, 0, 50)
+        artist_count = int_param(params, "artistCount", 10, 0, 50)
 
         songs = await self.backend.search(query, limit=max(song_count, 20)) if query else []
         song_items: list[dict[str, Any]] = []
@@ -283,12 +303,11 @@ class OpenSubsonicAPI:
 
         for s in songs[:song_count]:
             child = s.to_child()
-            cover_url = s.cover if is_valid_cover_url(s.cover) else ""
             album_id = s.album_id or s.id
             child["albumId"] = album_id
             child["parent"] = album_id
             child["album"] = s.album or s.title
-            child["coverArt"] = cover_url or album_id or s.id
+            child["coverArt"] = album_id or s.id
             song_items.append(child)
 
         return self.ok(
@@ -434,7 +453,7 @@ class OpenSubsonicAPI:
 
     async def _similar(self, params: dict[str, str], method: str) -> dict[str, Any]:
         sid = params.get("id")
-        count = max(1, min(int(params.get("count") or 10), 50))
+        count = int_param(params, "count", 10, 1, 50)
         songs = list(self.backend.song_cache.values())
         target = self.backend.song_cache.get(sid or "")
         if target:

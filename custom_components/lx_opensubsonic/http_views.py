@@ -51,7 +51,7 @@ class OpenSubsonicView(HomeAssistantView):
             result = await api.handle(method_name, params)
         except Exception as err:  # noqa: BLE001
             _LOGGER.exception("OpenSubsonic handler error: %s", err)
-            return web.json_response(api.fail(0, str(err)))
+            return web.json_response(api.fail(0, "Internal server error"))
 
         if isinstance(result, tuple) and result and result[0] == "cover":
             img = await data["backend"].fetch_cover_bytes(result[1])
@@ -90,7 +90,7 @@ class OpenSubsonicRootView(HomeAssistantView):
         return web.json_response(
             {
                 "name": "LX OpenSubsonic",
-                "version": data.get("version", "0.5.2"),
+                "version": data.get("version", "unknown"),
                 "rest_base": f"{request.scheme}://{request.host}/api/lx_opensubsonic/rest",
                 "configured": bool(data.get("api")),
                 "search_source": getattr(backend, "search_source", None) if backend else None,

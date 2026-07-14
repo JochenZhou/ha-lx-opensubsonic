@@ -81,7 +81,7 @@ class _BaseSelect(SelectEntity):
             store = self._data.get("playlist_store")
             if store is not None:
                 store.last_source = value
-                store.save()
+                await store.async_save(self.hass)
         self.async_write_ha_state()
         coordinator = self._data.get("coordinator")
         if coordinator is not None:
@@ -147,6 +147,7 @@ class LxImportedPlaylistSelect(SelectEntity):
         if not store or option == "无歌单":
             return
         store.set_selected_by_name(option)
+        await store.async_save(self.hass)
         self.async_write_ha_state()
         # refresh related sensors
         coordinator = self._data.get("coordinator")

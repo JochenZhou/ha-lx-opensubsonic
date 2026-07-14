@@ -16,7 +16,6 @@ _MA_PLAYLIST_HINT = (
     "1) 先到音乐源「OpenSubsonic Media Server Library」里点重载/立即同步；\n"
     "2) 若还没有，再去「浏览 → OpenSubsonic Media Server Library → 播放列表」点开一次；\n"
     "3) 仍没有再重启 Music Assistant。\n"
-    "说明：新导入歌单首次打开可能要十几秒到几十秒（MA 会逐曲取专辑/歌词元数据）；"
     "搜索页不支持找导入歌单。"
 )
 
@@ -141,11 +140,11 @@ class LxImportPlaylistButton(_BaseBtn):
                 backend.cache_song(tr.to_song())
             msg = f"{store.last_message}\n\n{_MA_PLAYLIST_HINT}"
             store.last_message = msg
-            store.save()
+            await store.async_save(self.hass)
             await self._notify("导入成功", msg)
         except Exception as err:  # noqa: BLE001
             store.last_message = f"导入失败: {err}"
-            store.save()
+            await store.async_save(self.hass)
             await self._notify("导入失败", str(err))
         await self._refresh_ui()
 
@@ -166,11 +165,11 @@ class LxRefreshPlaylistButton(_BaseBtn):
                 backend.cache_song(tr.to_song())
             msg = f"{store.last_message}\n\n{_MA_PLAYLIST_HINT}"
             store.last_message = msg
-            store.save()
+            await store.async_save(self.hass)
             await self._notify("刷新成功", msg)
         except Exception as err:  # noqa: BLE001
             store.last_message = f"刷新失败: {err}"
-            store.save()
+            await store.async_save(self.hass)
             await self._notify("刷新失败", str(err))
         await self._refresh_ui()
 
@@ -187,6 +186,6 @@ class LxDeletePlaylistButton(_BaseBtn):
         msg = store.delete_selected()
         msg = f"{msg}\n\n如需从 Music Assistant 自带播放列表移除，请在 MA 中同步/重启后刷新库。"
         store.last_message = msg
-        store.save()
+        await store.async_save(self.hass)
         await self._notify("删除歌单", msg)
         await self._refresh_ui()
