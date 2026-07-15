@@ -9,9 +9,11 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
 
 from .const import (
+    CONF_ALLOW_OBFUSCATED_JS,
     CONF_MUSIC_SOURCE_JS_URL,
     CONF_PREFERRED_QUALITY,
     CONF_SEARCH_SOURCE,
+    DEFAULT_ALLOW_OBFUSCATED_JS,
     DEFAULT_MUSIC_SOURCE_JS_URL,
     DEFAULT_PREFERRED_QUALITY,
     DEFAULT_SEARCH_SOURCE,
@@ -43,6 +45,10 @@ def _install_schema(defaults: dict | None = None):
                 default=d.get(CONF_MUSIC_SOURCE_JS_URL, DEFAULT_MUSIC_SOURCE_JS_URL),
             ): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.URL)),
             vol.Optional(
+                CONF_ALLOW_OBFUSCATED_JS,
+                default=bool(d.get(CONF_ALLOW_OBFUSCATED_JS, DEFAULT_ALLOW_OBFUSCATED_JS)),
+            ): selector.BooleanSelector(),
+            vol.Optional(
                 CONF_PREFERRED_QUALITY,
                 default=d.get(CONF_PREFERRED_QUALITY, DEFAULT_PREFERRED_QUALITY),
             ): selector.SelectSelector(
@@ -69,6 +75,10 @@ def _account_schema(defaults: dict | None = None):
                 CONF_MUSIC_SOURCE_JS_URL,
                 default=d.get(CONF_MUSIC_SOURCE_JS_URL, DEFAULT_MUSIC_SOURCE_JS_URL),
             ): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.URL)),
+            vol.Optional(
+                CONF_ALLOW_OBFUSCATED_JS,
+                default=bool(d.get(CONF_ALLOW_OBFUSCATED_JS, DEFAULT_ALLOW_OBFUSCATED_JS)),
+            ): selector.BooleanSelector(),
         }
     )
 
@@ -97,6 +107,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_PASSWORD: user_input.get(CONF_PASSWORD, defaults.get(CONF_PASSWORD, "password")),
                 CONF_MUSIC_SOURCE_JS_URL: user_input.get(
                     CONF_MUSIC_SOURCE_JS_URL, defaults.get(CONF_MUSIC_SOURCE_JS_URL, "")
+                ),
+                CONF_ALLOW_OBFUSCATED_JS: bool(
+                    user_input.get(CONF_ALLOW_OBFUSCATED_JS, defaults.get(CONF_ALLOW_OBFUSCATED_JS, False))
                 ),
             }
             self.hass.config_entries.async_update_entry(entry, data=new_data)

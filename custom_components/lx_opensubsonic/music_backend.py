@@ -162,15 +162,23 @@ class MusicBackend:
         search_source: str = "tx",
         music_source_js_url: str = "",
         preferred_quality: str = "flac",
+        allow_obfuscated_js: bool = False,
     ) -> None:
         self._session = session
         self.search_source = (search_source or "tx").lower()
         self.music_source_js_url = (music_source_js_url or "").strip()
         self.preferred_quality = preferred_quality or "flac"
+        self.allow_obfuscated_js = bool(allow_obfuscated_js)
         self.song_cache: dict[str, Song] = {}
         self.cover_cache: dict[str, str] = {}
         self._timeout = ClientTimeout(total=20)
-        self._source_cache: dict[str, Any] = {"url": None, "api_url": "", "api_key": "", "ts": 0}
+        self._source_cache: dict[str, Any] = {
+            "url": None,
+            "api_url": "",
+            "api_key": "",
+            "script": "",
+            "ts": 0,
+        }
 
     def _trim_cache(self, cache: dict[str, Any], max_size: int) -> None:
         while len(cache) > max_size:
@@ -948,7 +956,14 @@ class MusicBackend:
         parsed = parse_music_source_js(script)
         api_url = (parsed.get("api_url") or "").rstrip("/")
         api_key = parsed.get("api_key") or ""
-        self._source_cache = {"url": js_url, "api_url": api_url, "api_key": api_key, "ts": now, "name": parsed.get("name")}
+        self._source_cache = {
+            "url": js_url,
+            "api_url": api_url,
+            "api_key": api_key,
+            "script": script,
+            "ts": now,
+            "name": parsed.get("name"),
+        }
         if not api_url:
             _LOGGER.warning(
                 "music source js has no extractable API_URL (maybe obfuscated). name=%s",
@@ -965,8 +980,6 @@ class MusicBackend:
 
     async def resolve_music_url_api(self, song: Song) -> str | None:
         api_url, api_key = await self._ensure_music_source_from_js()
-        if not api_url:
-            return None
         song_id = song.songmid or song.id
         # kg sources usually need hash
         if song.source == "kg":
@@ -974,6 +987,28 @@ class MusicBackend:
         if isinstance(song_id, str) and song_id.startswith(f"{song.source}_"):
             song_id = song_id[len(song.source) + 1 :]
         source = song.source or self.search_source or "tx"
+        if not api_url:
+            if not self.allow_obfuscated_js:
+                return None
+            script = str(self._source_cache.get("script") or "")
+            if not script:
+                return None
+            try:
+                from .lx_js_runner import resolve_lx_music_url
+
+                for quality in self._quality_candidates(song):
+                    url = await resolve_lx_music_url(
+                        script=script,
+                        source=source,
+                        songmid=str(song_id),
+                        quality=quality,
+                        timeout=15,
+                    )
+                    if url:
+                        return url
+            except Exception as err:
+                _LOGGER.warning("obfuscated LX JS execution failed for %s: %s", song.id, err)
+            return None
         headers = {
             "Content-Type": "application/json",
             "User-Agent": "lx-music-request/2.0.0",
@@ -1076,11 +1111,15 @@ class MusicBackend:
         t0 = _time.time()
         try:
             api_url, api_key = await self._ensure_music_source_from_js()
-            result["js_ok"] = bool(api_url)
+            script_ready = bool(self._source_cache.get("script"))
+            runtime_ready = bool(self.allow_obfuscated_js and script_ready)
+            result["js_ok"] = bool(api_url or runtime_ready)
             result["js_api_ready"] = bool(api_url)
+            result["js_runtime_ready"] = runtime_ready
+            result["allow_obfuscated_js"] = self.allow_obfuscated_js
             result["js_key_ready"] = bool(api_key)
-            if not api_url and self.music_source_js_url:
-                result["errors"].append("自定义音源 JS 未能解析出可用播放地址服务")
+            if not api_url and not runtime_ready and self.music_source_js_url:
+                result["errors"].append("自定义音源 JS 未能解析；如确认信任该脚本，可在重新配置中启用高风险混淆 JS 模式")
         except Exception as err:
             result["errors"].append(f"音源 JS 检查失败: {err}")
         result["elapsed_ms"]["js"] = int((_time.time() - t0) * 1000)

@@ -13,9 +13,11 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
+    CONF_ALLOW_OBFUSCATED_JS,
     CONF_MUSIC_SOURCE_JS_URL,
     CONF_PREFERRED_QUALITY,
     CONF_SEARCH_SOURCE,
+    DEFAULT_ALLOW_OBFUSCATED_JS,
     DEFAULT_PREFERRED_QUALITY,
     DEFAULT_SEARCH_SOURCE,
     DOMAIN,
@@ -55,6 +57,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     password = cfg[CONF_PASSWORD]
     search_source = cfg.get(CONF_SEARCH_SOURCE) or DEFAULT_SEARCH_SOURCE
     music_source_js_url = (cfg.get(CONF_MUSIC_SOURCE_JS_URL) or "").strip()
+    allow_obfuscated_js = bool(cfg.get(CONF_ALLOW_OBFUSCATED_JS, DEFAULT_ALLOW_OBFUSCATED_JS))
     preferred_quality = cfg.get(CONF_PREFERRED_QUALITY) or DEFAULT_PREFERRED_QUALITY
 
     backend = MusicBackend(
@@ -62,6 +65,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         search_source=search_source,
         music_source_js_url=music_source_js_url,
         preferred_quality=preferred_quality,
+        allow_obfuscated_js=allow_obfuscated_js,
     )
     store_path = Path(hass.config.path(f".storage/{DOMAIN}_playlists_{entry.entry_id}.json"))
     playlist_store = PlaylistStore(store_path)
@@ -92,6 +96,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "search_source": search_source,
             "preferred_quality": preferred_quality,
             "music_source_js_url": music_source_js_url,
+            "allow_obfuscated_js": allow_obfuscated_js,
             "entry_id": entry.entry_id,
             "version": version,
             "coordinator": coordinator,
@@ -153,6 +158,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "search_source",
             "preferred_quality",
             "music_source_js_url",
+            "allow_obfuscated_js",
             "entry_id",
             "version",
         ]:
