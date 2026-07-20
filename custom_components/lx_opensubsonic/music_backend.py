@@ -25,6 +25,7 @@ UA = (
 )
 MAX_SONG_CACHE = 5000
 MAX_COVER_CACHE = 5000
+MAX_MUSIC_SOURCE_JS_BYTES = 1024 * 1024
 
 
 def _md5(s: str) -> str:
@@ -104,6 +105,18 @@ def parse_music_source_js(script: str) -> dict[str, str]:
     if name:
         out["name"] = name.group(1).strip()
     return out
+
+
+async def _read_limited_text(resp, limit: int = MAX_MUSIC_SOURCE_JS_BYTES) -> str:
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in resp.content.iter_chunked(64 * 1024):
+        total += len(chunk)
+        if total > limit:
+            raise ValueError("music source js is too large")
+        chunks.append(bytes(chunk))
+    charset = resp.charset or "utf-8"
+    return b"".join(chunks).decode(charset, errors="replace")
 
 
 @dataclass
@@ -944,7 +957,7 @@ class MusicBackend:
                     if resp.status != 200:
                         last_err = RuntimeError(f"status {resp.status}")
                         continue
-                    script = await resp.text()
+                    script = await _read_limited_text(resp)
                     if script:
                         break
             except Exception as err:
@@ -960,7 +973,7 @@ class MusicBackend:
             "url": js_url,
             "api_url": api_url,
             "api_key": api_key,
-            "script": script,
+            "script": script if (self.allow_obfuscated_js and not api_url) else "",
             "ts": now,
             "name": parsed.get("name"),
         }

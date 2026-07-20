@@ -10,35 +10,57 @@ strictly opt-in and carries user-accepted risk.
 from __future__ import annotations
 
 import asyncio
+import http.client
 import ipaddress
 import json
 import multiprocessing
+import os
+import resource
 import socket
-from urllib.parse import urlparse
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+import ssl
+import threading
+from urllib.parse import urljoin, urlparse
 
 _MAX_SCRIPT_BYTES = 1024 * 1024
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+_MAX_REDIRECTS = 5
+_MAX_CONCURRENT_RUNNERS = 2
+_RUNNER_SEMAPHORE = threading.BoundedSemaphore(_MAX_CONCURRENT_RUNNERS)
+
+
+def _resolve_public_ips(hostname: str, port: int) -> list[str]:
+    ips: list[str] = []
+    for item in socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM):
+        ip = ipaddress.ip_address(item[4][0])
+        if not ip.is_global:
+            raise ValueError("Private, local, reserved, and non-global network targets are blocked")
+        if str(ip) not in ips:
+            ips.append(str(ip))
+    if not ips:
+        raise ValueError("No public address resolved")
+    return ips
 
 
 def _validate_public_http_url(url: str) -> None:
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         raise ValueError("Only HTTP(S) requests are allowed")
-    for item in socket.getaddrinfo(parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80)):
-        ip = ipaddress.ip_address(item[4][0])
-        if not ip.is_global:
-            raise ValueError("Private, local, reserved, and non-global network targets are blocked")
+    _resolve_public_ips(parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80))
 
 
-class _SafeRedirectHandler(HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        _validate_public_http_url(newurl)
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    def __init__(self, ip: str, port: int, tls_hostname: str, timeout: float):
+        context = ssl.create_default_context()
+        super().__init__(ip, port=port, timeout=timeout, context=context)
+        self._tls_hostname = tls_hostname
+        self._tls_context = context
+
+    def connect(self) -> None:
+        sock = socket.create_connection((self.host, self.port), self.timeout, getattr(self, "source_address", None))
+        self.sock = self._tls_context.wrap_socket(sock, server_hostname=self._tls_hostname)
 
 
 def _http_request(url: str, options_json: str) -> str:
-    _validate_public_http_url(url)
     options = json.loads(options_json or "{}")
     method = str(options.get("method") or "GET").upper()
     if method not in {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"}:
@@ -50,20 +72,68 @@ def _http_request(url: str, options_json: str) -> str:
         headers.setdefault("Content-Type", "application/json")
     payload = str(body).encode("utf-8") if body is not None else None
     timeout = max(1.0, min(float(options.get("timeout") or 10000) / 1000.0, 20.0))
-    req = Request(url, data=payload, headers=headers, method=method)
-    opener = build_opener(_SafeRedirectHandler())
-    with opener.open(req, timeout=timeout) as response:
-        content = response.read(_MAX_RESPONSE_BYTES + 1)
-        if len(content) > _MAX_RESPONSE_BYTES:
-            raise ValueError("HTTP response is too large")
-        return json.dumps(
-            {
-                "statusCode": response.status,
-                "headers": dict(response.headers.items()),
-                "body": content.decode("utf-8", errors="replace"),
-            },
-            ensure_ascii=False,
-        )
+    current_url = url
+    for _ in range(_MAX_REDIRECTS + 1):
+        parsed = urlparse(current_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise ValueError("Only HTTP(S) requests are allowed")
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        ip = _resolve_public_ips(parsed.hostname, port)[0]
+        path = parsed.path or "/"
+        if parsed.query:
+            path += "?" + parsed.query
+        request_headers = dict(headers)
+        request_headers["Host"] = parsed.hostname if parsed.port is None else f"{parsed.hostname}:{parsed.port}"
+        conn: http.client.HTTPConnection
+        if parsed.scheme == "https":
+            conn = _PinnedHTTPSConnection(ip, port, parsed.hostname, timeout)
+        else:
+            conn = http.client.HTTPConnection(ip, port=port, timeout=timeout)
+        try:
+            conn.request(method, path, body=payload, headers=request_headers)
+            response = conn.getresponse()
+            if response.status in {301, 302, 303, 307, 308}:
+                location = response.getheader("Location")
+                response.read()
+                if not location:
+                    raise ValueError("Redirect without Location")
+                current_url = urljoin(current_url, location)
+                _validate_public_http_url(current_url)
+                if response.status == 303:
+                    method = "GET"
+                    payload = None
+                continue
+            content = response.read(_MAX_RESPONSE_BYTES + 1)
+            if len(content) > _MAX_RESPONSE_BYTES:
+                raise ValueError("HTTP response is too large")
+            return json.dumps(
+                {
+                    "statusCode": response.status,
+                    "headers": dict(response.getheaders()),
+                    "body": content.decode("utf-8", errors="replace"),
+                },
+                ensure_ascii=False,
+            )
+        finally:
+            conn.close()
+    raise ValueError("Too many redirects")
+
+
+def _apply_worker_limits() -> None:
+    if os.name != "posix":
+        return
+    try:
+        resource.setrlimit(resource.RLIMIT_CPU, (8, 10))
+    except (OSError, ValueError):
+        pass
+    try:
+        resource.setrlimit(resource.RLIMIT_AS, (384 * 1024 * 1024, 384 * 1024 * 1024))
+    except (OSError, ValueError):
+        pass
+    try:
+        resource.setrlimit(resource.RLIMIT_NOFILE, (32, 32))
+    except (OSError, ValueError):
+        pass
 
 
 def _resolve_sync(script: str, source: str, songmid: str, quality: str) -> str:
@@ -149,6 +219,7 @@ globalThis.__lxStart = function(payloadJson) {
 
 def _worker(connection, script: str, source: str, songmid: str, quality: str) -> None:
     try:
+        _apply_worker_limits()
         value = _resolve_sync(script, source, songmid, quality)
         connection.send((True, value))
     except BaseException as err:
@@ -158,6 +229,15 @@ def _worker(connection, script: str, source: str, songmid: str, quality: str) ->
 
 
 def _resolve_in_process(script: str, source: str, songmid: str, quality: str, timeout: float) -> str:
+    if not _RUNNER_SEMAPHORE.acquire(blocking=False):
+        return ""
+    try:
+        return _resolve_in_process_locked(script, source, songmid, quality, timeout)
+    finally:
+        _RUNNER_SEMAPHORE.release()
+
+
+def _resolve_in_process_locked(script: str, source: str, songmid: str, quality: str, timeout: float) -> str:
     ctx = multiprocessing.get_context("spawn")
     receive_connection, send_connection = ctx.Pipe(duplex=False)
     process = ctx.Process(
@@ -176,7 +256,11 @@ def _resolve_in_process(script: str, source: str, songmid: str, quality: str, ti
     if not receive_connection.poll(0.5):
         receive_connection.close()
         return ""
-    ok, value = receive_connection.recv()
+    try:
+        ok, value = receive_connection.recv()
+    except EOFError:
+        receive_connection.close()
+        return ""
     receive_connection.close()
     if not ok:
         raise RuntimeError(f"LX JS 子进程执行失败: {value}")
