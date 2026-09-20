@@ -85,11 +85,15 @@ def parse_music_source_js(script: str) -> dict[str, str]:
         if m:
             out["api_url"] = m.group(2).rstrip("/")
     if "api_url" not in out:
-        # generic .../url?source=
-        m = re.search(r"""(["'])(https?://[^"']+?/url)\1""", script)
+        # generic .../music/url?source=  —— 剥掉 /music/url 或 /url 得到 base
+        m = re.search(r"""(["'])(https?://[^"']+?/(?:music/)?url)\1""", script)
         if m:
             base = m.group(2)
-            out["api_url"] = base[:-4] if base.endswith("/url") else base.rstrip("/")
+            for suffix in ("/music/url", "/url"):
+                if base.endswith(suffix):
+                    base = base[: -len(suffix)]
+                    break
+            out["api_url"] = base.rstrip("/")
 
     # X-API-Key string literals
     if "api_key" not in out:
@@ -1030,28 +1034,35 @@ class MusicBackend:
             headers["X-API-Key"] = api_key
         last_err: Exception | None = None
         for quality in self._quality_candidates(song):
-            url = f"{api_url}/url"
             params = {"source": source, "songId": song_id, "quality": quality}
-            try:
-                async with self._session.get(
-                    url,
-                    params=params,
-                    headers=headers,
-                    timeout=self._timeout,
-                    allow_redirects=True,
-                ) as resp:
-                    if resp.status in (301, 302, 303, 307, 308):
-                        loc = resp.headers.get("Location")
-                        if loc:
-                            return loc
-                    data = await resp.json(content_type=None)
-                code = data.get("code")
-                if code in (200, "200") and data.get("url"):
-                    return str(data["url"])
-                last_err = RuntimeError(f"code={code} msg={data.get('message')}")
-            except Exception as err:
-                last_err = err
-                continue
+            # 音源脚本用 `${API_URL}/music/url`；部分旧脚本/自建端点是 `${API_URL}/url`。
+            # 两个都试，避免把路径写死成某一个导致 404。
+            for path in ("/music/url", "/url"):
+                url = f"{api_url}{path}"
+                try:
+                    async with self._session.get(
+                        url,
+                        params=params,
+                        headers=headers,
+                        timeout=self._timeout,
+                        allow_redirects=True,
+                    ) as resp:
+                        if resp.status in (301, 302, 303, 307, 308):
+                            loc = resp.headers.get("Location")
+                            if loc:
+                                return loc
+                        if resp.status == 404:
+                            last_err = RuntimeError(f"404 {url}")
+                            continue
+                        data = await resp.json(content_type=None)
+                    code = data.get("code")
+                    if code in (200, "200") and data.get("url"):
+                        return str(data["url"])
+                    last_err = RuntimeError(f"code={code} msg={data.get('message')}")
+                    break
+                except Exception as err:
+                    last_err = err
+                    continue
         _LOGGER.warning("music_url_api failed for %s: %s", song.id, last_err)
         return None
 

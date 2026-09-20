@@ -74,7 +74,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = LxOpenSubsonicCoordinator(hass, entry, backend)
 
     hass.data.setdefault(DOMAIN, {})
-    version = _integration_version()
+    version = await hass.async_add_executor_job(_integration_version)
     entry_data = {
         "api": api,
         "backend": backend,
