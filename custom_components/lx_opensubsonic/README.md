@@ -115,6 +115,7 @@ https://github.com/JochenZhou/ha-lx-opensubsonic
 - 音质选择
 - 健康状态传感器与测试连接按钮
 - **手动导入多平台歌单** 到 OpenSubsonic 播放列表（供 MA 播放列表使用）
+- 兼容性空响应端点：`getPodcasts` / `getNewestPodcasts` / `getInternetRadioStations` / `getBookmarks` / `getGenres` 返回协议规定的空列表，避免 MA 推荐行与库同步任务报错
 
 ## 歌单导入（手动）
 

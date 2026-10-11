@@ -204,12 +204,27 @@ class OpenSubsonicAPI:
         if method in ("getStarred", "getStarred2"):
             key = "starred2" if method.endswith("2") else "starred"
             return self.ok({key: {"song": [], "album": [], "artist": []}})
-        if method in ("getRandomSongs", "getSongsByGenre", "getSongsByGenre2"):
+        if method == "getRandomSongs":
             return self.ok({"randomSongs": {"song": []}})
+        if method in ("getSongsByGenre", "getSongsByGenre2"):
+            return self.ok({"songsByGenre": {"song": []}})
         if method in ("getSimilarSongs", "getSimilarSongs2"):
             return await self._similar(params, method)
         if method == "getTopSongs":
             return self.ok({"topSongs": {"song": []}})
+        if method == "getGenres":
+            return self.ok({"genres": {"genre": []}})
+        # Only imported playlists exist on this bridge: there are no podcasts,
+        # radio stations or bookmarks. Answer with the documented empty
+        # containers instead of "Method not found" so clients that always call
+        # these endpoints (e.g. Music Assistant recommendation rows and library
+        # sync) do not raise or spam warnings.
+        if method in ("getPodcasts", "getNewestPodcasts"):
+            return self.ok({"podcasts": {"channel": []}})
+        if method == "getInternetRadioStations":
+            return self.ok({"internetRadioStations": {"internetRadioStation": []}})
+        if method == "getBookmarks":
+            return self.ok({"bookmarks": {"bookmark": []}})
         if method == "getLyrics":
             return await self._get_lyrics(params)
         if method == "getLyricsBySongId":
